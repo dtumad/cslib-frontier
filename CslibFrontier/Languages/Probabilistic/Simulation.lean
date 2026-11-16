@@ -204,14 +204,19 @@ theorem run_interpret_map_state_of_invariant
 
 /-- A deterministic representation commuting with each call preserves the complete execution. -/
 theorem run_interpret_map_state
-    (oracle : (q : ι) → StateT State PMF (spec q))
-    (oracle' : (q : ι) → StateT State' PMF (spec q)) (represent : State → State')
-    (step : ∀ q s, (oracle q s).map (fun (a, s') => (a, represent s')) =
+    {m : Type v → Type*} [Monad m] [LawfulMonad m]
+    (oracle : (q : ι) → StateT State m (spec q))
+    (oracle' : (q : ι) → StateT State' m (spec q)) (represent : State → State')
+    (step : ∀ q s, (fun (a, s') => (a, represent s')) <$> oracle q s =
       oracle' q (represent s)) (program : OracleComp spec α) (s : State) :
-    ((interpret oracle program).run s).map (fun (a, s') => (a, represent s')) =
-      (interpret oracle' program).run (represent s) :=
-  run_interpret_map_state_of_invariant oracle oracle' represent (fun _ => True)
-    (by simp) (fun q s _ => step q s) program s trivial
+    (fun (a, s') => (a, represent s')) <$> (interpret oracle program).run s =
+      (interpret oracle' program).run (represent s) := by
+  induction program using OracleComp.induction generalizing s with
+  | pure a => simp
+  | query_bind q cont ih =>
+    simp only [run_interpret_bind, run_interpret_query, map_bind]
+    rw [← step q s, bind_map_left]
+    exact bind_congr fun (a, s') => ih a s'
 
 /-- Representing replies and private state commutes with adaptive execution. Oracle substitution
 supplies each target reply by mapping a source reply, including to adaptive continuations.
@@ -226,7 +231,7 @@ theorem run_interpret_map_response_state {spec' : OracleSpec.{u, v} ι}
         (fun (a, s') => (a, represent s')) =
       (interpret oracle' program).run (represent s) := by
   rw [interpret_interpret]
-  apply run_interpret_map_state
+  apply run_interpret_map_state (m := PMF)
   intro q state
   change ((oracle q state).map (fun (a, next) => (response q a, next))).map
     (fun (a, next) => (a, represent next)) = oracle' q (represent state)
