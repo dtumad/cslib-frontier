@@ -288,7 +288,7 @@ theorem IsCostBounded.transcript_cost_le {cost : Query → ℕ} {program : Oracl
       PMF.monad_map_eq_map, PMF.mem_support_map_iff] at hfirst
     obtain ⟨⟨answer, next⟩, -, heq⟩ := hfirst
     cases heq
-    rw [run_interpret_withTranscript_append, PMF.mem_support_map_iff] at hrest
+    rw [run_interpret_withTranscript_append, PMF.monad_map_eq_map, PMF.mem_support_map_iff] at hrest
     obtain ⟨⟨result', final, fresh⟩, hfresh, heq⟩ := hrest
     cases heq
     have := ih answer hfresh
