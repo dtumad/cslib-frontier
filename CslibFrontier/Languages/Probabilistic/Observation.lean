@@ -47,9 +47,11 @@ def withObserver (oracle : (q : Query) → StateT State m (Response q))
 /-- The observation update sees the same reply and final state that the oracle returned. -/
 @[simp] theorem withObserver_apply (oracle : (q : Query) → StateT State m (Response q))
     (update : (q : Query) → State → Response q → State → Obs → Obs)
-    (q : Query) (s : State) (observation : Obs) :
-    withObserver oracle update q (s, observation) =
-      (fun (answer, s') => (answer, s', update q s answer s' observation)) <$> oracle q s := by
+    (q : Query) (state : State × Obs) :
+    withObserver oracle update q state =
+      (fun (answer, s') => (answer, s', update q state.1 answer s' state.2)) <$>
+        oracle q state.1 := by
+  rcases state with ⟨s, observation⟩
   rfl
 
 variable [LawfulMonad m]

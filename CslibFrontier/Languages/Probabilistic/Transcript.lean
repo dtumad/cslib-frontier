@@ -7,7 +7,7 @@ Authors: Samuel Schlesinger
 module
 -- upstream: candidate
 
-public import CslibFrontier.Languages.Probabilistic.Simulation
+public import CslibFrontier.Languages.Probabilistic.Observation
 
 /-!
 # Observing oracle transcripts
@@ -37,43 +37,63 @@ Adapted from Languages/Probabilistic/Transcript.lean on the cslib `crypto` branc
 `5ff69ca93402e7c947208dc56396d6d86203ccd8`, using the single `OracleComp.interpret` interface.
 -/
 
-@[expose] public section
+public section
 
 namespace Cslib.OracleComp
 
-universe u
+universe u v
 
 variable {Query : Type u} {Response : Query → Type u} {State α : Type u}
+variable {m : Type u → Type v} [Monad m]
 
 /-- Queries and their typed replies, stored in reverse chronological order. -/
 abbrev Transcript (Response : Query → Type u) := List ((q : Query) × Response q)
 
 /-- Observe calls without changing the underlying oracle's replies or private state. -/
-noncomputable def withTranscript (oracle : (q : Query) → StateT State PMF (Response q))
-    (q : Query) : StateT (State × Transcript Response) PMF (Response q) :=
-  fun (s, transcript) => (oracle q s).map
-    (fun (answer, s') => (answer, (s', ⟨q, answer⟩ :: transcript)))
+def withTranscript (oracle : (q : Query) → StateT State m (Response q))
+    (q : Query) : StateT (State × Transcript Response) m (Response q) :=
+  withObserver oracle (fun q _ answer _ transcript => ⟨q, answer⟩ :: transcript) q
+
+/-- Each call prepends its query and reply to the existing transcript. -/
+@[simp] theorem withTranscript_apply (oracle : (q : Query) → StateT State m (Response q))
+    (q : Query) (state : State × Transcript Response) :
+    withTranscript oracle q state =
+      (fun (answer, s') => (answer, s', ⟨q, answer⟩ :: state.2)) <$> oracle q state.1 :=
+  withObserver_apply _ _ _ _
+
+variable [LawfulMonad m]
 
 /-- Forgetting the transcript preserves the result and the oracle's complete final state. -/
-theorem run_interpret_withTranscript (oracle : (q : Query) → StateT State PMF (Response q))
+theorem run_interpret_withTranscript (oracle : (q : Query) → StateT State m (Response q))
     (program : OracleComp Response α) (s : State) (transcript : Transcript Response) :
-    ((interpret (withTranscript oracle) program).run (s, transcript)).map
-        (fun (result, state) => (result, state.1)) = (interpret oracle program).run s := by
-  apply run_interpret_map_state (withTranscript oracle) oracle Prod.fst
-  intro q state
-  simp only [withTranscript, PMF.map_comp, Function.comp_def, Prod.mk.eta]
-  exact PMF.map_id _
+    (fun (result, state, _) => (result, state)) <$>
+        (interpret (withTranscript oracle) program).run (s, transcript) =
+      (interpret oracle program).run s :=
+  run_interpret_withObserver oracle _ program s transcript
 
 /-- An existing transcript is an untouched suffix of the newly recorded interaction. -/
-theorem run_interpret_withTranscript_append (oracle : (q : Query) → StateT State PMF (Response q))
+theorem run_interpret_withTranscript_append (oracle : (q : Query) → StateT State m (Response q))
     (program : OracleComp Response α) (s : State) (transcript : Transcript Response) :
     (interpret (withTranscript oracle) program).run (s, transcript) =
-      ((interpret (withTranscript oracle) program).run (s, [])).map
-        (fun (result, state, fresh) => (result, state, fresh ++ transcript)) := by
+      (fun (result, state, fresh) => (result, state, fresh ++ transcript)) <$>
+        (interpret (withTranscript oracle) program).run (s, []) := by
   symm
   apply run_interpret_map_state (withTranscript oracle) (withTranscript oracle)
     (fun state => (state.1, state.2 ++ transcript))
-  intro q state
-  simp [withTranscript, PMF.map_comp, Function.comp_def]
+  rintro q ⟨state, fresh⟩
+  simp [Functor.map_map]
+
+/-- A representation of the private state transports the complete typed transcript unchanged. -/
+theorem run_interpret_withTranscript_map_state {State' : Type u}
+    (oracle : (q : Query) → StateT State m (Response q))
+    (oracle' : (q : Query) → StateT State' m (Response q)) (represent : State → State')
+    (step : ∀ q s, (fun (a, s') => (a, represent s')) <$> oracle q s =
+      oracle' q (represent s))
+    (program : OracleComp Response α) (s : State) (transcript : Transcript Response) :
+    (fun (a, s', seen) => (a, represent s', seen)) <$>
+        (interpret (withTranscript oracle) program).run (s, transcript) =
+      (interpret (withTranscript oracle') program).run (represent s, transcript) :=
+  run_interpret_withObserver_map oracle oracle' _ _ represent id step
+    (by intros; rfl) program s transcript
 
 end Cslib.OracleComp
