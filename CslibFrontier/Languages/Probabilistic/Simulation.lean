@@ -32,6 +32,7 @@ There is one oracle specification and one interpreter; stateful execution uses `
   interpretation of `pure`, `>>=`, `<$>`, and `query`.
 * `Cslib.OracleComp.run_interpret_invariant`: invariants of each call hold after execution.
 * `Cslib.OracleComp.run_interpret_simulation_of_invariant`: probabilistic state simulation.
+* `Cslib.OracleComp.run_interpret_map_state`: deterministic state transport in any lawful monad.
 * `Cslib.OracleComp.run_interpret_map_state_of_invariant`: deterministic state representation.
 * `Cslib.OracleComp.run_interpret_map_response_state`: represent both replies and private state.
 * `Cslib.OracleComp.map_run_interpret`: a monad morphism commutes with stateful interpretation.

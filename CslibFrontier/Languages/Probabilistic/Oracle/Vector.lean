@@ -116,7 +116,8 @@ theorem length_transcript_pi_query {m : ℕ} {State : Type}
     obtain ⟨⟨first, s₁, seen⟩, hfirst, ⟨rest, s₂, total⟩, hrest, heq⟩ := hmem
     simp only [Prod.map, id_eq, Prod.mk.injEq] at heq
     rcases heq with ⟨-, rfl, rfl⟩
-    simp only [OracleComp.withTranscript, PMF.mem_support_map_iff] at hfirst
+    simp only [OracleComp.withTranscript_apply,
+      PMF.monad_map_eq_map, PMF.mem_support_map_iff] at hfirst
     obtain ⟨⟨ans, next⟩, -, hfirst_eq⟩ := hfirst
     cases hfirst_eq
     rw [ProbOracleComp.run_interpret_withTranscript_append, PMF.mem_support_map_iff] at hrest

@@ -70,7 +70,8 @@ private theorem run_interpret_memoize_transcript_prob (distribution : Query → 
         (⟨entry.1, entry.2⟩ ∈ seen ∧ entry.2 ∈ (distribution entry.1).support))
     ?_ program (cache, []) (by simp) result (cache', transcript) h
   rintro q ⟨current, seen⟩ ⟨hcount, hentries⟩ answer next hnext
-  simp only [OracleComp.withTranscript, PMF.mem_support_map_iff, mem_support_memoize_iff] at hnext
+  simp only [OracleComp.withTranscript_apply,
+    PMF.monad_map_eq_map, PMF.mem_support_map_iff, mem_support_memoize_iff] at hnext
   obtain ⟨⟨value, current'⟩, hvalue, heq⟩ := hnext
   cases heq
   dsimp only at hvalue

@@ -135,7 +135,8 @@ private theorem run_interpret_memoize_transcript (distribution : Query → PMF V
         (⟨entry.1, entry.2⟩ ∈ seen ∧ entry.2 ∈ (distribution entry.1).support))
     ?_ program (cache, []) (by simp) result (cache', transcript) h
   rintro q ⟨current, seen⟩ ⟨hcount, hentries⟩ answer next hnext
-  simp only [OracleComp.withTranscript, PMF.mem_support_map_iff, mem_support_memoize_iff] at hnext
+  simp only [OracleComp.withTranscript_apply,
+    PMF.monad_map_eq_map, PMF.mem_support_map_iff, mem_support_memoize_iff] at hnext
   obtain ⟨⟨value, current'⟩, hvalue, heq⟩ := hnext
   cases heq
   dsimp only at hvalue
@@ -153,7 +154,7 @@ theorem memoize_cache_bounds (distribution : Query → PMF Value)
       ∀ entry ∈ cache', entry ∈ cache ∨
         (size entry.1 ≤ maxSize ∧ entry.2 ∈ (distribution entry.1).support) := by
   rw [← OracleComp.run_interpret_withTranscript (memoize distribution) program cache [],
-    PMF.mem_support_map_iff] at h
+    PMF.monad_map_eq_map, PMF.mem_support_map_iff] at h
   obtain ⟨⟨value, state⟩, hstate, heq⟩ := h
   cases heq
   obtain ⟨hcount, hentries⟩ := run_interpret_memoize_transcript distribution program cache state.1
@@ -222,7 +223,8 @@ theorem run_interpret_memoize (distribution : Query → PMF Value)
     ((OracleComp.interpret (memoize distribution) program).run cache).map
         (fun (result, cache') => (result, ofList cache')) =
       (OracleComp.interpret (answer distribution) program).run (ofList cache) :=
-  OracleComp.run_interpret_map_state _ _ _ (memoize_map_ofList distribution) program cache
+  OracleComp.run_interpret_map_state (memoize distribution) (answer distribution) ofList
+    (memoize_map_ofList distribution) program cache
 
 end List
 

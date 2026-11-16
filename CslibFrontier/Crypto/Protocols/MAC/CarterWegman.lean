@@ -694,7 +694,7 @@ theorem run_interpret_counterRealHandler {α : Type} [Fintype Y] [Nonempty Y] (h
         (fun x => (x.1, transcriptToPads hash k x.2)) := by
   refine (OracleComp.run_interpret_map_state counterSimHandler (counterRealHandler hash k)
     (transcriptToPads hash k) (fun m s => ?_) prog tr).symm
-  dsimp only [counterSimHandler, counterRealHandler, PMF.monad_bind_eq_bind,
+  dsimp only [counterSimHandler, counterRealHandler, PMF.monad_map_eq_map, PMF.monad_bind_eq_bind,
     PMF.monad_pure_eq_pure, StateT.pure]
   rw [PMF.map_bind]
   symm

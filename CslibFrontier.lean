@@ -6578,6 +6578,7 @@ public import CslibFrontier.Languages.Probabilistic.Memoize
 public import CslibFrontier.Languages.Probabilistic.Norm
 public import CslibFrontier.Languages.Probabilistic.Norm.Init
 public import CslibFrontier.Languages.Probabilistic.Notation
+public import CslibFrontier.Languages.Probabilistic.Observation
 public import CslibFrontier.Languages.Probabilistic.Oracle
 public import CslibFrontier.Languages.Probabilistic.Oracle.Codec
 public import CslibFrontier.Languages.Probabilistic.Oracle.CoinFixing

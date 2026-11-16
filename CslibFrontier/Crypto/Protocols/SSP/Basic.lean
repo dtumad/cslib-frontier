@@ -208,7 +208,7 @@ theorem eval_run_eq_of_represent (M M' : Machine OracleSpec.empty E)
   rw [← OracleComp.run_interpret_map_state
     (fun q state => (Machine.closeProgram (M.handler q state)).eval)
     (fun q state => (Machine.closeProgram (M'.handler q state)).eval) represent hstep,
-    PMF.map_comp]
+    PMF.monad_map_eq_map, PMF.map_comp]
   exact congrArg (PMF.map · _) (funext fun ⟨_, _⟩ => rfl)
 
 end Simulation

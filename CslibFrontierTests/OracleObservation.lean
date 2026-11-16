@@ -1,3 +1,9 @@
+/-
+Copyright (c) 2026 Devon Tuma. All rights reserved.
+Released under Apache 2.0 license as described in the file LICENSE.
+Authors: Devon Tuma
+-/
+
 module
 
 import CslibFrontier.Languages.Probabilistic.Observation
@@ -7,6 +13,22 @@ import CslibFrontier.Languages.Probabilistic.Oracle.Transcript
 open Cslib Cslib.OracleComp
 
 namespace OracleObservationTests
+
+-- The identity monad needs no probability structure, and observations can depend on both states.
+example : (interpret
+    (withObserver (m := Id) (fun (_ : Unit) (s : Nat) => (s, s + 1) :
+      Unit → StateT Nat Id Nat)
+      (fun _ before answer after seen => seen ++ [before, answer, after]))
+    (query ())).run (4, [2]) = (4, 5, [2, 4, 4, 5]) := by
+  rw [run_interpret_query, withObserver_apply]
+  rfl
+
+-- A failed base effect remains failed; observation cannot manufacture a reply.
+example : (interpret
+    (withObserver (fun (_ : Unit) (_ : Nat) => none : Unit → StateT Nat Option Nat)
+      (fun _ _ answer _ seen => answer :: seen)) (query ())).run (4, [2]) = none := by
+  rw [run_interpret_query, withObserver_apply]
+  rfl
 
 public inductive Request
   | read

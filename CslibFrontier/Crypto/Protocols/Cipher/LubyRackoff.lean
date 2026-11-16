@@ -486,7 +486,7 @@ private theorem feistel3FixedGame_eq_realRoundHandler (f₁ : G → G)
   have hdrop := OracleComp.run_interpret_map_state (realRoundHandler f₁) (lazyRoundHandler f₁)
     Prod.fst (realRoundHandler_map_fst f₁) (dedup program) ([], false)
   have hdrop' := congrArg (PMF.map fun x => x.1.1) hdrop
-  simp only [PMF.map_comp, Function.comp_def] at hdrop'
+  simp only [PMF.monad_map_eq_map, PMF.map_comp, Function.comp_def] at hdrop'
   rw [hdrop']
   have hlazy := RandomOracle.interpret_eq_memoize (fun _ : Bool × G => PMF.uniformOfFintype G)
     (OracleComp.interpret (feistel3Query f₁) (dedup program))
@@ -1770,7 +1770,7 @@ private theorem feistel4StrongFixedGame_eq_realRoundHandler4 (f₁ f₄ : G → 
     (lazyRoundHandler4 f₁ f₄) Prod.fst (realRoundHandler4_map_fst f₁ f₄)
     (RandomPermutation.bidirDedup prog) ([], false)
   have hdrop' := congrArg (PMF.map fun x => x.1.1) hdrop
-  simp only [PMF.map_comp, Function.comp_def] at hdrop'
+  simp only [PMF.monad_map_eq_map, PMF.map_comp, Function.comp_def] at hdrop'
   rw [hdrop']
   have hlazy := RandomOracle.interpret_eq_memoize (fun _ : Bool × G => PMF.uniformOfFintype G)
     (OracleComp.interpret (feistel4Query f₁ f₄) (RandomPermutation.bidirDedup prog))

@@ -643,13 +643,13 @@ private theorem programmed_bounds (law : PMF K)
       fun _ => none).map Prod.fst
     real true ≤ ideal true + bad ∧ ideal true ≤ real true + bad := by
   intro bad real ideal
-  have hrep := OracleComp.run_interpret_map_state _ _ (F.programCache d point key)
+  have hrep := OracleComp.run_interpret_map_state (m := PMF) _ _ (F.programCache d point key)
     (F.programCache_step d law point key) program fun _ => none
   rw [show F.programCache d point key (fun _ => none) =
     Function.update (fun _ => none) point (some key) from ite_eq_left rfl] at hrep
   have hreal : real = ((OracleComp.interpret (RandomOracle.answer (F.programmedLaw d law point key))
       program).run fun _ => none).map Prod.fst := by
-    simp only [real, ← hrep, PMF.map_comp]
+    simp only [real, ← hrep, PMF.monad_map_eq_map, PMF.map_comp]
     rfl
   have hU := F.identicalUntilBad_programmedLaw d law point key
   have h1 := hU.bind_apply_le program (fun _ => none) (PMF.pure ∘ Prod.fst) true
@@ -773,9 +773,9 @@ private theorem bad_le_extract (x : ZMod (F.order d)) (hx : x ≠ 0) (sampleKey 
           F.runDDH d x (F.extractDH d (y • F.generator d) r.2)).bind fun guess =>
             PMF.pure (decide (guess = x • y • F.generator d))) true := by
   rw [roAdversary, OracleComp.interpret_interpret, ← F.tableCache_nil d x,
-    ← OracleComp.run_interpret_map_state _ _ (F.tableCache d x)
+    ← OracleComp.run_interpret_map_state (m := PMF) _ _ (F.tableCache d x)
       (F.lowerHandler_step d x hx sampleKey (y • F.generator d)),
-    PMF.toOuterMeasure_map_apply, PMF.bind_bind]
+    PMF.monad_map_eq_map, PMF.toOuterMeasure_map_apply, PMF.bind_bind]
   refine toOuterMeasure_le_bind_apply _ _ _ _ fun ⟨a, table⟩ hmem hbad => ?_
   have hinv := OracleComp.run_interpret_invariant _ (F.NoChallengeEntry d (y • F.generator d))
     (F.lowerHandler_noChallenge d x hx sampleKey (y • F.generator d)) _ []

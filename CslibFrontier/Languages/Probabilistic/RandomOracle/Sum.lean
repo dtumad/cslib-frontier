@@ -252,7 +252,9 @@ theorem run_interpret_memoizeSum (dist₁ : ι₁ → PMF R₁) (dist₂ : ι₂
         (fun (res, st') => (res, Cache.sum (ofList st'.1) (ofList st'.2))) =
       runWith (answer (sumHandler (spec₁ := fun _ : ι₁ => R₁) (spec₂ := fun _ : ι₂ => R₂)
         dist₁ dist₂)) prog (Cache.sum (ofList st.1) (ofList st.2)) := by
-  refine run_interpret_map_state _ _ (fun st => Cache.sum (ofList st.1) (ofList st.2)) ?_ prog st
+  refine run_interpret_map_state (m := PMF) _ _
+    (fun st => Cache.sum (ofList st.1) (ofList st.2)) ?_ prog st
+  simp only [PMF.monad_map_eq_map]
   rintro (q | q) ⟨tr₁, tr₂⟩
   · rw [memoizeSum_inl, PMF.map_comp, answer_sum_inl, ← memoize_map_ofList, PMF.map_comp]
     rfl

@@ -729,7 +729,8 @@ private theorem run_runCoins_typedQuery {σ σ' : Type} (n : ℕ) (rep : σ' →
     OracleComp.map_run_interpret ProbComp.isMonadHom_eval, ProbOracleComp.runWith,
     OracleComp.runWith, OracleComp.interpret_interpret]
   simp only [ProbOracleComp.interpret_query]
-  exact OracleComp.run_interpret_map_state _ _ rep (fun q st => hstep q.1 q.2 st) W s
+  exact OracleComp.run_interpret_map_state (m := PMF) _ _ rep
+    (fun q st => hstep q.1 q.2 st) W s
 
 /-- The challenge words of the saved-coin budget at parameter `n`: a generated public key, a
 uniform key of length `keyLen n` and an encryption of a uniform message, as the word

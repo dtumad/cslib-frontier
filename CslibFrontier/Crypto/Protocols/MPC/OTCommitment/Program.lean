@@ -270,7 +270,7 @@ theorem receiverIdealProgram_schedule
       [.inr (), .inl (if release then .open else .abort), .inr (), .inl (.commit b)] := by
   simp only [pmf_norm, receiverIdealProgram, receiverPrefixProgram, ProbOracleComp.runWith_bind,
     ProbOracleComp.runWith_query, ProbOracleComp.runWith_sample, ProbOracleComp.runWith_pure,
-    OracleComp.withTranscript, Phased.handler, OracleComp.sumHandler, Phased.advance,
+    OracleComp.withTranscript_apply, Phased.handler, OracleComp.sumHandler, Phased.advance,
     Phased.observe] at h
   simp only [PMF.mem_support_bind_iff] at h
   obtain ⟨⟨transcript, final⟩, _, ⟨release, later⟩, _, h⟩ := h

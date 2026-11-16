@@ -578,10 +578,12 @@ private theorem bidirDedupStep_transcript_inv {β σ : Type}
         OracleComp.interpret_pure, StateT.run_bind, StateT.run_pure,
         PMF.mem_support_bind_iff] at hmem
       obtain ⟨⟨a, s₁, tr₁⟩, hfirst, hrest⟩ := hmem
-      simp only [StateT.run, OracleComp.withTranscript, PMF.mem_support_map_iff] at hfirst
+      simp only [StateT.run, OracleComp.withTranscript_apply,
+        PMF.monad_map_eq_map, PMF.mem_support_map_iff] at hfirst
       obtain ⟨⟨a', s₁'⟩, -, heq⟩ := hfirst
       cases heq
-      rw [OracleComp.run_interpret_withTranscript_append, PMF.mem_support_map_iff] at hrest
+      rw [OracleComp.run_interpret_withTranscript_append, PMF.monad_map_eq_map,
+        PMF.mem_support_map_iff] at hrest
       obtain ⟨⟨⟨res', c'⟩, s₂', fresh⟩, hfresh, heq'⟩ := hrest
       cases heq'
       obtain ⟨hceq, hnodup, hmiss⟩ := ih a' hfresh
@@ -675,7 +677,7 @@ theorem length_cache_le_of_mem_support_run_bidirDedupStep {β σ : Type}
     cache'.length ≤ cache.length + Q := by
   rw [← OracleComp.run_interpret_withTranscript oracle
     ((OracleComp.interpret bidirDedupStep program).run cache) s [],
-    PMF.mem_support_map_iff] at hmem
+    PMF.monad_map_eq_map, PMF.mem_support_map_iff] at hmem
   obtain ⟨⟨⟨res', c'⟩, s'', transcript⟩, htr, heq⟩ := hmem
   cases heq
   have hceq := cache_eq_of_mem_support_withTranscript_bidirDedupStep oracle program htr

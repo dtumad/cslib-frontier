@@ -95,7 +95,8 @@ theorem query_bounds_runFrom (machine : MultiTapePTM k Symbol Control Operation)
         exact ⟨by lia, fun entry hentry => by have := hsize entry hentry; lia⟩
       | query op next =>
         simp only [ha, ProbOracleComp.runWith_bind, ProbOracleComp.runWith_query] at h
-        simp only [OracleComp.withTranscript, PMF.bind_map, Function.comp_def,
+        simp only [OracleComp.withTranscript_apply,
+          PMF.monad_map_eq_map, PMF.bind_map, Function.comp_def,
           PMF.mem_support_bind_iff] at h
         obtain ⟨⟨answer, nextState⟩, _, h⟩ := h
         have hnext : ∀ operation,
