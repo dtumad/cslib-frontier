@@ -46,8 +46,7 @@ theorem run_interpret_withTranscript (oracle : (q : Query) → StateT State PMF 
       ProbOracleComp.runWith oracle program s := by
   apply ProbOracleComp.runWith_map_state (withTranscript oracle) oracle Prod.fst
   intro q state
-  simp only [withTranscript_apply,
-    PMF.monad_map_eq_map, PMF.map_comp, Function.comp_def, Prod.mk.eta]
+  simp only [withTranscript_apply_pmf, PMF.map_comp, Function.comp_def, Prod.mk.eta]
   exact PMF.map_id _
 
 /-- Fresh external observations are prepended to an existing transcript. Private draws do not
@@ -62,6 +61,6 @@ theorem run_interpret_withTranscript_append
   apply ProbOracleComp.runWith_map_state (withTranscript oracle) (withTranscript oracle)
     (fun state => (state.1, state.2 ++ transcript))
   intro q state
-  simp [withTranscript_apply, PMF.map_comp, Function.comp_def]
+  simp [withTranscript_apply_pmf, PMF.map_comp, Function.comp_def]
 
 end Cslib.ProbOracleComp

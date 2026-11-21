@@ -9,6 +9,7 @@ module
 import CslibFrontier.Languages.Probabilistic.Observation
 import CslibFrontier.Languages.Probabilistic.Transcript
 import CslibFrontier.Languages.Probabilistic.Oracle.Transcript
+import CslibFrontier.Languages.Probabilistic.RandomPermutation
 
 open Cslib Cslib.OracleComp
 
@@ -77,6 +78,17 @@ example : ((interpret (withObserver (withObserver oracle record)
     withObserver_apply, StateT.run_bind, StateT.run_map, StateT.run_pure, oracle, record]
   rfl
 
+-- The product law observes the very same answers and state transitions.
+example :
+    ((fun (a, (s, log), n) => (a, s, log, n)) <$>
+      (interpret (withObserver (withObserver oracle record)
+        (fun _ _ _ _ n => n + 1)) program).run ((4, [99]), 7)).run 0 =
+      (((4, true, 5), 5, [99, 4, 4, 4, 4, 1, 5, 5, 5, 5], 10), 3) := by
+  rw [run_interpret_withObserver_prod oracle record (fun _ _ _ _ (n : Nat) => n + 1)]
+  simp only [program, run_interpret_bind, run_interpret_query, run_interpret_pure,
+    withObserver_apply, StateT.run_bind, StateT.run_map, StateT.run_pure, oracle, record]
+  rfl
+
 -- Typed transcripts are newest first and preserve a nonempty suffix, even in a non-PMF monad.
 example : ((interpret (withTranscript oracle) program).run
     (4, [⟨Request.read, 20⟩])).run 0 =
@@ -94,5 +106,23 @@ example (sample : ProbComp Bool) :
       (ProbOracleComp.sample sample) (4, []) =
         (sample.eval).map (fun result => (result, 4, [])) := by
   simp [ProbOracleComp.runWith_sample]
+
+open Cslib.RandomPermutation
+
+-- On a hit, even a previously set flag is retained and no entry is added.
+example (bad : Bool) :
+    forgetfulWithBad (.forward false) ([(false, false)], bad) =
+      PMF.pure (false, [(false, false)], bad) :=
+  forgetfulWithBad_of_cachedAnswer_eq_some (by decide) bad
+
+-- On a miss, false collides with the previously occupied range while true is fresh.
+example :
+    forgetfulWithBad (.forward true) ([(false, false)], false) =
+      (PMF.uniformOfFintype Bool).map
+        (fun a => (a, [(true, a), (false, false)], !a)) := by
+  rw [forgetfulWithBad_of_cachedAnswer_eq_none (by decide)]
+  congr 1
+  funext a
+  cases a <;> decide
 
 end OracleObservationTests

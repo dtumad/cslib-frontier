@@ -32,7 +32,7 @@ There is one oracle specification and one interpreter; stateful execution uses `
   interpretation of `pure`, `>>=`, `<$>`, and `query`.
 * `Cslib.OracleComp.run_interpret_invariant`: invariants of each call hold after execution.
 * `Cslib.OracleComp.run_interpret_simulation_of_invariant`: probabilistic state simulation.
-* `Cslib.OracleComp.run_interpret_map_state`: deterministic state transport in any lawful monad.
+* `Cslib.OracleComp.map_state_run_interpret`: deterministic state transport in any lawful monad.
 * `Cslib.OracleComp.run_interpret_map_state_of_invariant`: deterministic state representation.
 * `Cslib.OracleComp.run_interpret_map_response_state`: represent both replies and private state.
 * `Cslib.OracleComp.map_run_interpret`: a monad morphism commutes with stateful interpretation.
@@ -48,17 +48,6 @@ namespace Cslib.OracleComp
 universe u v w
 
 variable {ι : Type u} {spec : OracleSpec.{u, v} ι} {α State State' : Type v}
-
-/-- Structural induction on an oracle program, presenting the step case as
-`OracleComp.query q >>= cont`. -/
-@[elab_as_elim] theorem induction {motive : OracleComp spec α → Prop}
-    (pure : ∀ a, motive (pure a))
-    (query_bind : ∀ q (cont : spec q → OracleComp spec α),
-      (∀ a, motive (cont a)) → motive (query q >>= cont))
-    (program : OracleComp spec α) : motive program := by
-  induction program with
-  | pure a => exact pure a
-  | liftBind q cont ih => exact query_bind q cont ih
 
 section RunInterpret
 
@@ -118,7 +107,7 @@ theorem run_interpret_invariant
       PMF.mem_support_pure_iff, Prod.mk.injEq] at h
     rwa [h.2]
   | query_bind q cont ih =>
-    simp only [interpret_bind, interpret_query, StateT.run_bind,
+    simp only [PFunctor.FreeM.bind_eq_bind, interpret_bind, interpret_query, StateT.run_bind,
       Probability.PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at h
     obtain ⟨⟨a, next⟩, ha, h⟩ := h
     exact ih a next (step q s hs a next ha) h
@@ -140,7 +129,7 @@ theorem run_interpret_simulation_of_invariant
   induction program using OracleComp.induction generalizing s with
   | pure a => simp [PMF.map, Function.comp_def]
   | query_bind q cont ih =>
-    simp only [interpret_bind, interpret_query, StateT.run_bind,
+    simp only [PFunctor.FreeM.bind_eq_bind, interpret_bind, interpret_query, StateT.run_bind,
       Probability.PMF.monad_bind_eq_bind, PMF.bind_bind]
     calc
       _ = (oracle q s).bind (fun (a, s') =>
@@ -204,7 +193,7 @@ theorem run_interpret_map_state_of_invariant
       program s hs
 
 /-- A deterministic representation commuting with each call preserves the complete execution. -/
-theorem run_interpret_map_state
+theorem map_state_run_interpret
     {m : Type v → Type*} [Monad m] [LawfulMonad m]
     (oracle : (q : ι) → StateT State m (spec q))
     (oracle' : (q : ι) → StateT State' m (spec q)) (represent : State → State')
@@ -219,6 +208,16 @@ theorem run_interpret_map_state
     rw [← step q s, bind_map_left]
     exact bind_congr fun (a, s') => ih a s'
 
+/-- Representing each PMF transition maps the joint output and final state of an adaptive run. -/
+theorem run_interpret_map_state
+    (oracle : (q : ι) → StateT State PMF (spec q))
+    (oracle' : (q : ι) → StateT State' PMF (spec q)) (represent : State → State')
+    (step : ∀ q s, (oracle q s).map (fun (a, s') => (a, represent s')) =
+      oracle' q (represent s)) (program : OracleComp spec α) (s : State) :
+    ((interpret oracle program).run s).map (fun (a, s') => (a, represent s')) =
+      (interpret oracle' program).run (represent s) :=
+  map_state_run_interpret oracle oracle' represent step program s
+
 /-- Representing replies and private state commutes with adaptive execution. Oracle substitution
 supplies each target reply by mapping a source reply, including to adaptive continuations.
 This corollary of state simulation retains the joint result and represented final state. -/
@@ -232,7 +231,7 @@ theorem run_interpret_map_response_state {spec' : OracleSpec.{u, v} ι}
         (fun (a, s') => (a, represent s')) =
       (interpret oracle' program).run (represent s) := by
   rw [interpret_interpret]
-  apply run_interpret_map_state (m := PMF)
+  apply run_interpret_map_state
   intro q state
   change ((oracle q state).map (fun (a, next) => (response q a, next))).map
     (fun (a, next) => (a, represent next)) = oracle' q (represent state)
@@ -265,7 +264,8 @@ theorem run_interpret_run_interpret {κ : Type w} {target : OracleSpec.{w, v} κ
   induction program using OracleComp.induction generalizing hidden external with
   | pure a => simp
   | query_bind q cont ih =>
-    simp only [interpret_bind, interpret_query, StateT.run_bind, map_bind]
+    simp only [PFunctor.FreeM.bind_eq_bind, interpret_bind, interpret_query, StateT.run_bind,
+      map_bind]
     simp only [StateT.run, bind_map_left]
     exact bind_congr fun (result : (spec q × Hidden) × External) =>
       ih result.1.1 result.1.2 result.2

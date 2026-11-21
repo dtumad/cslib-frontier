@@ -11,6 +11,7 @@ public import CslibFrontier.Languages.Probabilistic.QueryCount
 public import CslibFrontier.Languages.Probabilistic.Memoize
 public import CslibFrontier.Probability.Product
 
+import CslibFrontier.Languages.Probabilistic.Oracle.InterpNorm
 import CslibFrontier.Languages.Probabilistic.Semantics
 
 /-!
@@ -135,8 +136,7 @@ private theorem run_interpret_memoize_transcript (distribution : Query → PMF V
         (⟨entry.1, entry.2⟩ ∈ seen ∧ entry.2 ∈ (distribution entry.1).support))
     ?_ program (cache, []) (by simp) result (cache', transcript) h
   rintro q ⟨current, seen⟩ ⟨hcount, hentries⟩ answer next hnext
-  simp only [OracleComp.withTranscript_apply,
-    PMF.monad_map_eq_map, PMF.mem_support_map_iff, mem_support_memoize_iff] at hnext
+  simp only [OracleComp.withTranscript_apply_pmf, PMF.mem_support_map_iff, mem_support_memoize_iff] at hnext
   obtain ⟨⟨value, current'⟩, hvalue, heq⟩ := hnext
   cases heq
   dsimp only at hvalue
@@ -154,7 +154,7 @@ theorem memoize_cache_bounds (distribution : Query → PMF Value)
       ∀ entry ∈ cache', entry ∈ cache ∨
         (size entry.1 ≤ maxSize ∧ entry.2 ∈ (distribution entry.1).support) := by
   rw [← OracleComp.run_interpret_withTranscript (memoize distribution) program cache [],
-    PMF.monad_map_eq_map, PMF.mem_support_map_iff] at h
+    PMF.mem_support_map_iff] at h
   obtain ⟨⟨value, state⟩, hstate, heq⟩ := h
   cases heq
   obtain ⟨hcount, hentries⟩ := run_interpret_memoize_transcript distribution program cache state.1
@@ -223,8 +223,7 @@ theorem run_interpret_memoize (distribution : Query → PMF Value)
     ((OracleComp.interpret (memoize distribution) program).run cache).map
         (fun (result, cache') => (result, ofList cache')) =
       (OracleComp.interpret (answer distribution) program).run (ofList cache) :=
-  OracleComp.run_interpret_map_state (memoize distribution) (answer distribution) ofList
-    (memoize_map_ofList distribution) program cache
+  OracleComp.run_interpret_map_state _ _ _ (memoize_map_ofList distribution) program cache
 
 end List
 
@@ -397,8 +396,8 @@ theorem interpret_eq_memoize_map {Key' Value' : Type u} [BEq Key'] [LawfulBEq Ke
   have houtput := congrArg (PMF.map Prod.fst) hrun
   simp only [PMF.map_comp, Function.comp_def, represent, List.map_nil] at houtput
   rw [← houtput]
-  simpa only [OracleComp.interpret_interpret, OracleComp.interpret_map, OracleComp.interpret_query,
-    PMF.monad_map_eq_map, PMF.pure_map] using interpret_eq_memoize distribution
+  simpa only [OracleComp.interpret_interpret, interp_norm,
+    pmf_norm] using interpret_eq_memoize distribution
       (OracleComp.interpret (fun key => valueMap <$> OracleComp.query key) program)
 
 end ListFinite

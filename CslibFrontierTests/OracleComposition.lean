@@ -75,7 +75,7 @@ private noncomputable def collectStep (bits : List Bool) : WordOracleComp Unit (
 -- An adaptive loop with growing requests is strict oracle PPT by its one-bit growth bound.
 example : IsOraclePPTOn encUnary encBits
     (fun n => OracleComp.iterate n collectStep []) := by
-  refine IsOraclePPTOn.iterate_of_bounded_growth' (count := fun n => n) (initial := fun _ => [])
+  refine IsOraclePPTOn.iterate_of_bounded_growth (count := fun n => n) (initial := fun _ => [])
     (by fun_prop) (.const []) (by unfold collectStep; fun_prop) (growth := 1) ?_
   intro bits next hnext
   obtain ⟨prefix_, hprefix, rfl⟩ := OracleComp.mem_supportWith_map_iff.mp hnext
@@ -115,7 +115,7 @@ example : ¬ IsOraclePPTOn encUnary encBits (fun n => List.take 1 <$>
     (s := ()) (s' := ()) (result := [])
     (transcript := [⟨((), List.replicate (2 ^ n) true), []⟩]) (by
       rw [ProbOracleComp.runWith_map, ProbOracleComp.runWith_query]
-      simp [OracleComp.withTranscript]) _ List.mem_cons_self
+      simp [OracleComp.withTranscript_apply_pmf]) _ List.mem_cons_self
   simp only [List.length_replicate, encUnary_apply] at hcall
   lia
 

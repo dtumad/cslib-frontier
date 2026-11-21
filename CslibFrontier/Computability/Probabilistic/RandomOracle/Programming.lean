@@ -7,6 +7,7 @@ Authors: Samuel Schlesinger
 module
 -- upstream: candidate
 
+public import CslibFrontier.Computability.Machines.Turing.MultiTape.Encodings.Finite
 public import CslibFrontier.Computability.Probabilistic.Oracle.RunState
 public import CslibFrontier.Computability.Probabilistic.Memoize
 public import CslibFrontier.Computability.Machines.Turing.MultiTape.Encodings.Structure
@@ -433,12 +434,12 @@ theorem isPPTOn_lazyProgramWordHandler (input : Caller ↪ List Bool) (encLog : 
         (fun p : Caller × (ProgrammingOp × List Bool) × ProgrammingState Log =>
           (p.1, p.2.1.2)) callEncoding (encPair input encBits) := by fun_prop
     exact hactive.comp hactiveInput
-  have hprogram := Probability.IsPPTOn.cond'
+  have hprogram := Probability.IsPPTOn.cond
     hactiveOnCall hactiveCall hinactiveCall
   have hop : ComputableInPolyTime (fun p :
       Caller × (ProgrammingOp × List Bool) × ProgrammingState Log => p.2.1.1)
       callEncoding encProgrammingOp := by fun_prop
-  have hall := Probability.IsPPTOn.cond'
+  have hall := Probability.IsPPTOn.cond
     (ComputableInPolyTime.beq hop
       (ComputableInPolyTime.const ProgrammingOp.program)) hprogram hhash
   refine hall.congr fun p => ?_
@@ -565,12 +566,12 @@ theorem isPPTOn_overwriteProgramWordHandler (input : Caller ↪ List Bool)
         (fun p : Caller × (ProgrammingOp × List Bool) × ProgrammingState Log =>
           (p.1, p.2.1.2)) callEncoding (encPair input encBits) := by fun_prop
     exact hactive.comp hactiveInput
-  have hprogram := Probability.IsPPTOn.cond'
+  have hprogram := Probability.IsPPTOn.cond
     hactiveOnCall hactiveCall hinactiveCall
   have hop : ComputableInPolyTime (fun p :
       Caller × (ProgrammingOp × List Bool) × ProgrammingState Log => p.2.1.1)
       callEncoding encProgrammingOp := by fun_prop
-  have hall := Probability.IsPPTOn.cond'
+  have hall := Probability.IsPPTOn.cond
     (ComputableInPolyTime.beq hop
       (ComputableInPolyTime.const ProgrammingOp.program)) hprogram hhash
   refine hall.congr fun p => ?_

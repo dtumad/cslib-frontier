@@ -100,7 +100,7 @@ private theorem transcript_absorb
     ∀ out ∈ (withTranscript handler q state).support,
       ∃ entry ∈ out.2.2, entry.1 = target := by
   intro out hout
-  rw [withTranscript_apply, PMF.monad_map_eq_map] at hout
+  rw [withTranscript_apply_pmf] at hout
   obtain ⟨⟨reply, cache⟩, _, rfl⟩ := (PMF.mem_support_map_iff _ _ _).mp hout
   obtain ⟨entry, he, ht⟩ := h
   exact ⟨entry, List.mem_cons_of_mem _ he, ht⟩
@@ -119,12 +119,12 @@ private theorem replaceAnswer_untilBad (distribution : Query → PMF Value)
           withTranscript handler target state (reply, next) = 0 := by
         by_contra hnonzero
         have hmem := (PMF.mem_support_iff _ _).mpr hnonzero
-        rw [withTranscript_apply, PMF.monad_map_eq_map] at hmem
+        rw [withTranscript_apply_pmf] at hmem
         obtain ⟨⟨r, cache⟩, _, he⟩ := (PMF.mem_support_map_iff _ _ _).mp hmem
         cases he
         exact hgood ⟨⟨target, reply⟩, List.mem_cons_self, rfl⟩
       rw [hz, hz]
-    · simp only [withTranscript_apply, PMF.monad_map_eq_map, replaceAnswer, hq, ↓reduceIte]
+    · simp only [withTranscript_apply_pmf, replaceAnswer, hq, ↓reduceIte]
   absorb_first q state hs := transcript_absorb _ target q state hs
   absorb_second q state hs := transcript_absorb _ target q state hs
 
@@ -145,7 +145,7 @@ private theorem closeTo_answer_update (distribution : Query → PMF Value)
     (run_interpret_withTranscript (answer distribution) program cache [])
   have hp := congrArg (PMF.map Prod.fst)
     (replaceAnswer_run distribution target value program cache)
-  simp only [PMF.monad_map_eq_map, PMF.map_comp, Function.comp_def] at hl hr hp
+  simp only [PMF.map_comp, Function.comp_def] at hl hr hp
   rw [hl, hr, hp] at h
   exact h
 
@@ -158,7 +158,7 @@ theorem closeTo_run_interpret_memoize_cons (distribution : Query → PMF Value)
       (((interpret (memoize distribution) program).run ((target, value) :: cache)).map Prod.fst)
       (((interpret (memoize distribution) program).run cache).map Prod.fst)
       (((interpret (withTranscript (memoize distribution)) program).run (cache, [])).toOuterMeasure
-        {out | ∃ entry ∈ out.2.2, entry.1 = target}) := by
+        {(_, _, trace) | ∃ entry ∈ trace, entry.1 = target}) := by
   classical
   have h := closeTo_answer_update distribution target value program (ofList cache)
   have hl := congrArg (PMF.map Prod.fst)

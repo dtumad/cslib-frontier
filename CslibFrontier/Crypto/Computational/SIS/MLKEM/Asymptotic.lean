@@ -30,7 +30,9 @@ fair coins, where Kyber v3.02 and FIPS 203 expand a seed with `PRF`. The public 
 sampled matrix in place of the seed `ρ` from which Kyber's encryption re-derives it with `XOF`, and
 the adversary has no `XOF` or `G` oracle. It is a step towards Kyber v3.02 ([AvanziEtAl2021],
 §4.3.1, Theorem 1, p. 20), not that theorem, which assumes that `XOF` and `G` are random oracles
-and whose bound has an `Adv^prf` term. The `PRF` hop and the random-oracle lift are open under
+and whose bound has an `Adv^prf` term. The `PRF` hop is `indCPA_kpkePRF_of_decisionModuleLWEWith`
+(`CslibFrontier.Crypto.Computational.SIS.MLKEM.PRFSecurity`), whose last step is this one and which
+keeps the matrix in the public key; the random-oracle lift is open under
 [#5293](https://github.com/cslib-community/cslib-frontier/issues/5293#issuecomment-6893099765).
 
 For a K-PKE parameter family `P` computable in polynomial time from the unary security parameter,
@@ -68,8 +70,8 @@ Two differences make this a step and not Theorem 1:
 
 * Key generation and encryption decode fair bits with `SamplePolyCBD`, where Kyber expands a
   32-byte seed with `PRF` (`σ` in key generation, the coins `r` in encryption). This idealizes the
-  scheme's own coin expansion, so the bound has no `Adv^prf` term. Removing it needs a `PRF` hop
-  under a named pseudorandomness assumption, which is open under #5293.
+  scheme's own coin expansion, so the bound has no `Adv^prf` term. The `PRF` hops, under
+  `PseudorandomFunctionOver`, are in `indCPA_kpkePRF_of_decisionModuleLWEWith`.
 * The public key carries the matrix `A`, which key generation draws coefficientwise by the bounded
   modular sampler within `k * k * n / 2 ^ κ` of uniform. In Kyber the public key is
   `Encode(t̂) ‖ ρ` with `(ρ, σ) := G(d)`, and encryption re-derives `A` as `XOF(ρ)` (Algorithms 4
@@ -347,24 +349,15 @@ noncomputable def ciphertextReduction (A : Encryption.WordAdversary) (b : Bool) 
       (fun κ => (P κ).q) :=
   fun κ => mlweReduction (P κ) (wordAdversary P A κ) b
 
-/-- The word program of the public-key hop on `(κ, sample)`. -/
-private noncomputable def keyReductionWord (A : Encryption.WordAdversary) (b : Bool)
+/-- Shared word-level reduction program for the public-key and ciphertext Module-LWE hops. -/
+private noncomputable def mlweWordReduction (A : Encryption.WordAdversary) (b : Bool)
+    (pkOf : Params → List Bool → List Bool)
+    (ctOf : ℕ × List Bool → List Bool → ProbComp (List Bool))
     (x : ℕ × List Bool) : ProbComp Bool := do
-  let choice ← A.choose x.1 (keySamplePublicKey (P x.1) x.2)
-  let coins ← BitString.sampleList (coinLength (P x.1))
-  if (kpke P).IsMessagePair x.1 (keySamplePublicKey (P x.1) x.2) choice.1.1 choice.1.2 then
-    A.guess x.1 choice.2 (encDetWord (P x.1) (keySamplePublicKey (P x.1) x.2)
-      (if b then choice.1.2 else choice.1.1) coins)
-  else
-    pure false
-
-/-- The word program of the ciphertext hop on `(κ, sample)`. -/
-private noncomputable def ciphertextReductionWord (A : Encryption.WordAdversary) (b : Bool)
-    (x : ℕ × List Bool) : ProbComp Bool := do
-  let choice ← A.choose x.1 (extendedSamplePublicKey (P x.1) x.2)
-  if (kpke P).IsMessagePair x.1 (extendedSamplePublicKey (P x.1) x.2) choice.1.1 choice.1.2 then
-    A.guess x.1 choice.2
-      (extendedSampleCiphertext (P x.1) x.2 (if b then choice.1.2 else choice.1.1))
+  let choice ← A.choose x.1 (pkOf (P x.1) x.2)
+  if (kpke P).IsMessagePair x.1 (pkOf (P x.1) x.2) choice.1.1 choice.1.2 then do
+    let ct ← ctOf x (if b then choice.1.2 else choice.1.1)
+    A.guess x.1 choice.2 ct
   else
     pure false
 
@@ -373,120 +366,30 @@ private theorem select_getD (m₀ m₁ : List Bool) (b : Bool) {n : ℕ} :
       fun i : Fin n => (if b then m₁ else m₀).getD i false := by
   cases b <;> rfl
 
-private theorem eval_keyReduction [∀ κ, NeZero (P κ).q] (A : Encryption.WordAdversary)
-    (b : Bool) (κ : ℕ) (M : Matrix (Fin (P κ).k) (Fin (P κ).k) (Fin (P κ).n → ZMod (P κ).q))
-    (t : Fin (P κ).k → Fin (P κ).n → ZMod (P κ).q) :
-    ProbComp.eval (keyReduction P A b κ M t) =
-      ProbComp.eval (keyReductionWord P A b (κ, ModuleLWE.encodeSample (M, t))) := by
-  simp only [keyReduction, mlweKeyReduction, keyReductionWord, keySamplePublicKey_encodeSample,
-    wordAdversary, ProbComp.eval_bind, ProbComp.eval_map, PMF.bind_map, Function.comp_def]
-  refine congrArg _ (funext fun choice => ?_)
-  simp only [Encryption.ChoiceOut.msg₀, Encryption.ChoiceOut.msg₁, Encryption.ChoiceOut.msgs,
-    Encryption.ChoiceOut.state, select_getD]
-  by_cases hv : (kpke P).IsMessagePair κ (encodePublicKey (M, t)) choice.1.1 choice.1.2 = true
-  · simp only [hv, ite_true]
-    have h := congrArg (fun μ => μ.bind fun ct => ProbComp.eval (A.guess κ choice.2 ct))
-      (eval_encDetWord_sampleList (P κ) (M, t) (if b then choice.1.2 else choice.1.1))
-    simp only [ProbComp.eval_bind, ProbComp.eval_pure, PMF.bind_bind, PMF.pure_bind, PMF.bind_map,
-      Function.comp_def] at h
-    exact h.symm
-  · simp only [hv, Bool.false_eq_true, ite_false, PMF.bind_const]
-
-private theorem eval_ciphertextReduction [∀ κ, NeZero (P κ).q] (A : Encryption.WordAdversary)
-    (b : Bool) (κ : ℕ)
-    (M : Matrix (Fin ((P κ).k + 1)) (Fin (P κ).k) (Fin (P κ).n → ZMod (P κ).q))
-    (w : Fin ((P κ).k + 1) → Fin (P κ).n → ZMod (P κ).q) :
-    ProbComp.eval (ciphertextReduction P A b κ M w) =
-      ProbComp.eval (ciphertextReductionWord P A b (κ, ModuleLWE.encodeSample (M, w))) := by
-  simp only [ciphertextReduction, mlweReduction, ciphertextReductionWord,
-    extendedSamplePublicKey_encodeSample, extendedSampleCiphertext_encodeSample, wordAdversary,
-    ProbComp.eval_bind, ProbComp.eval_map, PMF.bind_map, Function.comp_def]
-  refine congrArg _ (funext fun choice => ?_)
-  simp only [Encryption.ChoiceOut.msg₀, Encryption.ChoiceOut.msg₁, Encryption.ChoiceOut.msgs,
-    Encryption.ChoiceOut.state, select_getD]
-
 variable {P}
 
-/-- **The public-key hop is uniform strict PPT** when the parameters are computable in polynomial
-time and `A` is uniform strict PPT. -/
-theorem isPPT_keyReduction [∀ κ, NeZero (P κ).q] (hP : ComputableInPolyTime P encUnary encParams)
-    {A : Encryption.WordAdversary} (hA : A.IsPPT) (b : Bool) :
-    (keyReduction P A b).IsPPT := by
-  have hW : IsPPTOn (encPair encUnary encBits) encBool (keyReductionWord P A b) := by
-    unfold keyReductionWord
-    let E := encPair encUnary encBits
-    have hκ : ComputableInPolyTime (fun x : ℕ × List Bool => x.1) E encUnary := by fun_prop
-    have hPκ : ComputableInPolyTime (fun x : ℕ × List Bool => P x.1) E encParams := hP.comp hκ
-    have hpk := ComputableInPolyTime.keySamplePublicKey hPκ
-      (by fun_prop : ComputableInPolyTime (fun x : ℕ × List Bool => x.2) E encBits)
-    have hchoose := hA.choose.on.preprocess (hκ.prod hpk)
+private theorem isPPT_mlweWordReduction [∀ κ, NeZero (P κ).q] {r : ℕ → ℕ}
+    (hP : ComputableInPolyTime P encUnary encParams) {A : Encryption.WordAdversary} (hA : A.IsPPT)
+    (b : Bool) (pkOf : Params → List Bool → List Bool)
+    (hpk : ComputableInPolyTime (fun x : ℕ × List Bool => pkOf (P x.1) x.2)
+      (encPair encUnary encBits) encBits)
+    (ctOf : ℕ × List Bool → List Bool → ProbComp (List Bool))
+    (hct : IsPPTOn (encPair (encPair encUnary encBits) encBits) encBits
+      (fun p : (ℕ × List Bool) × List Bool => ctOf p.1 p.2))
+    (D : ModuleLWE.Distinguisher r (fun κ => (P κ).k) (fun κ => (P κ).n) (fun κ => (P κ).q))
+    (heval : ∀ κ M t,
+      ProbComp.eval (D κ M t) =
+        ProbComp.eval (mlweWordReduction P A b pkOf ctOf (κ, ModuleLWE.encodeSample (M, t)))) :
+    D.IsPPT := by
+  let E := encPair encUnary encBits
+  have hκ : ComputableInPolyTime (fun x : ℕ × List Bool => x.1) E encUnary := by fun_prop
+  have hchoose := hA.choose.on.preprocess (hκ.prod hpk)
+  have hW : IsPPTOn E encBool (mlweWordReduction P A b pkOf ctOf) := by
     refine hchoose.bind_with ?_
     let F := encPair E (Encryption.encChoiceOut encBits)
-    have hκF : ComputableInPolyTime (fun y : (ℕ × List Bool) × Encryption.ChoiceOut (List Bool) =>
-        y.1.1) F encUnary := by fun_prop
-    have hPF : ComputableInPolyTime (fun y : (ℕ × List Bool) × Encryption.ChoiceOut (List Bool) =>
-        P y.1.1) F encParams := hP.comp hκF
-    have hL : ComputableInPolyTime (fun y : (ℕ × List Bool) × Encryption.ChoiceOut (List Bool) =>
-        coinLength (P y.1.1)) F encUnary := by
-      unfold coinLength
-      fun_prop
-    refine (isPPTOn_sampleList.preprocess hL).bind_with ?_
-    let G := encPair F encBits
-    have hκG : ComputableInPolyTime
-        (fun z : ((ℕ × List Bool) × Encryption.ChoiceOut (List Bool)) × List Bool => z.1.1.1) G
-        encUnary := by fun_prop
-    have hPG : ComputableInPolyTime
-        (fun z : ((ℕ × List Bool) × Encryption.ChoiceOut (List Bool)) × List Bool => P z.1.1.1) G
-        encParams := hP.comp hκG
-    have hpkG : ComputableInPolyTime
-        (fun z : ((ℕ × List Bool) × Encryption.ChoiceOut (List Bool)) × List Bool =>
-          keySamplePublicKey (P z.1.1.1) z.1.1.2) G encBits :=
-      ComputableInPolyTime.keySamplePublicKey hPG (by fun_prop)
-    have hvalid : ComputableInPolyTime
-        (fun z : ((ℕ × List Bool) × Encryption.ChoiceOut (List Bool)) × List Bool =>
-          (kpke P).IsMessagePair z.1.1.1 (keySamplePublicKey (P z.1.1.1) z.1.1.2) z.1.2.1.1
-            z.1.2.1.2) G encBool := by
-      simp only [WordPKE.IsMessagePair, kpke]
-      fun_prop
-    have hm : ComputableInPolyTime
-        (fun z : ((ℕ × List Bool) × Encryption.ChoiceOut (List Bool)) × List Bool =>
-          if b then z.1.2.1.2 else z.1.2.1.1) G encBits := by
-      cases b <;> fun_prop
-    have hct := ComputableInPolyTime.encDetWord hPG hpkG hm
-      (by fun_prop : ComputableInPolyTime
-        (fun z : ((ℕ × List Bool) × Encryption.ChoiceOut (List Bool)) × List Bool => z.2) G encBits)
-    have hguess := hA.guess.preprocess (hκG.prod ((by fun_prop : ComputableInPolyTime
-        (fun z : ((ℕ × List Bool) × Encryption.ChoiceOut (List Bool)) × List Bool => z.1.2.2) G
-        encBits).prod hct))
-    exact IsPPTOn.cond' hvalid hguess (ComputableInPolyTime.const false).isPPTOn
-  have h := hW.preprocess (ComputableInPolyTime.of_eq fun _ => rfl :
-    ComputableInPolyTime ModuleLWE.Input.words
-      (ModuleLWE.encInput (fun κ => (P κ).k) (fun κ => (P κ).k) (fun κ => (P κ).n)
-        (fun κ => (P κ).q)) (encPair encUnary encBits))
-  exact h.congr fun x => (eval_keyReduction P A b x.secParam x.matrix x.target).symm
-
-/-- **The ciphertext hop is uniform strict PPT** when the parameters are computable in polynomial
-time and `A` is uniform strict PPT. -/
-theorem isPPT_ciphertextReduction [∀ κ, NeZero (P κ).q]
-    (hP : ComputableInPolyTime P encUnary encParams) {A : Encryption.WordAdversary}
-    (hA : A.IsPPT) (b : Bool) : (ciphertextReduction P A b).IsPPT := by
-  have hW : IsPPTOn (encPair encUnary encBits) encBool (ciphertextReductionWord P A b) := by
-    unfold ciphertextReductionWord
-    let E := encPair encUnary encBits
-    have hκ : ComputableInPolyTime (fun x : ℕ × List Bool => x.1) E encUnary := by fun_prop
-    have hPκ : ComputableInPolyTime (fun x : ℕ × List Bool => P x.1) E encParams := hP.comp hκ
-    have hpk := ComputableInPolyTime.extendedSamplePublicKey hPκ
-      (by fun_prop : ComputableInPolyTime (fun x : ℕ × List Bool => x.2) E encBits)
-    have hchoose := hA.choose.on.preprocess (hκ.prod hpk)
-    refine hchoose.bind_with ?_
-    let F := encPair E (Encryption.encChoiceOut encBits)
-    have hκF : ComputableInPolyTime (fun y : (ℕ × List Bool) × Encryption.ChoiceOut (List Bool) =>
-        y.1.1) F encUnary := by fun_prop
-    have hPF : ComputableInPolyTime (fun y : (ℕ × List Bool) × Encryption.ChoiceOut (List Bool) =>
-        P y.1.1) F encParams := hP.comp hκF
     have hvalid : ComputableInPolyTime
         (fun y : (ℕ × List Bool) × Encryption.ChoiceOut (List Bool) =>
-          (kpke P).IsMessagePair y.1.1 (extendedSamplePublicKey (P y.1.1) y.1.2) y.2.1.1 y.2.1.2)
+          (kpke P).IsMessagePair y.1.1 (pkOf (P y.1.1) y.1.2) y.2.1.1 y.2.1.2)
         F encBool := by
       simp only [WordPKE.IsMessagePair, kpke]
       fun_prop
@@ -494,17 +397,84 @@ theorem isPPT_ciphertextReduction [∀ κ, NeZero (P κ).q]
         (fun y : (ℕ × List Bool) × Encryption.ChoiceOut (List Bool) =>
           if b then y.2.1.2 else y.2.1.1) F encBits := by
       cases b <;> fun_prop
-    have hct := ComputableInPolyTime.extendedSampleCiphertext hPF
-      (by fun_prop : ComputableInPolyTime
-        (fun y : (ℕ × List Bool) × Encryption.ChoiceOut (List Bool) => y.1.2) F encBits) hm
-    have hguess := hA.guess.preprocess (hκF.prod ((by fun_prop : ComputableInPolyTime
-        (fun y : (ℕ × List Bool) × Encryption.ChoiceOut (List Bool) => y.2.2) F encBits).prod hct))
-    exact IsPPTOn.cond' hvalid hguess (ComputableInPolyTime.const false).isPPTOn
+    have hctF := hct.preprocess ((by fun_prop : ComputableInPolyTime
+      (fun y : (ℕ × List Bool) × Encryption.ChoiceOut (List Bool) => y.1) F E).prod hm)
+    let G := encPair F encBits
+    have hguess := hA.guess.preprocess
+      ((by fun_prop : ComputableInPolyTime
+          (fun z : ((ℕ × List Bool) × Encryption.ChoiceOut (List Bool)) × List Bool =>
+            z.1.1.1) G encUnary).prod
+        ((by fun_prop : ComputableInPolyTime
+          (fun z : ((ℕ × List Bool) × Encryption.ChoiceOut (List Bool)) × List Bool =>
+            z.1.2.2) G encBits).prod
+          (by fun_prop : ComputableInPolyTime
+            (fun z : ((ℕ × List Bool) × Encryption.ChoiceOut (List Bool)) × List Bool =>
+              z.2) G encBits)))
+    exact IsPPTOn.cond hvalid (hctF.bind_with hguess) (ComputableInPolyTime.const false).isPPTOn
   have h := hW.preprocess (ComputableInPolyTime.of_eq fun _ => rfl :
     ComputableInPolyTime ModuleLWE.Input.words
-      (ModuleLWE.encInput (fun κ => (P κ).k + 1) (fun κ => (P κ).k) (fun κ => (P κ).n)
-        (fun κ => (P κ).q)) (encPair encUnary encBits))
-  exact h.congr fun x => (eval_ciphertextReduction P A b x.secParam x.matrix x.target).symm
+      (ModuleLWE.encInput r (fun κ => (P κ).k) (fun κ => (P κ).n) (fun κ => (P κ).q)) E)
+  exact h.congr fun x => (heval x.secParam x.matrix x.target).symm
+
+/-- **The public-key hop is uniform strict PPT** when the parameters are computable in polynomial
+time and `A` is uniform strict PPT. -/
+theorem isPPT_keyReduction [∀ κ, NeZero (P κ).q] (hP : ComputableInPolyTime P encUnary encParams)
+    {A : Encryption.WordAdversary} (hA : A.IsPPT) (b : Bool) :
+    (keyReduction P A b).IsPPT := by
+  let ctOf : ℕ × List Bool → List Bool → ProbComp (List Bool) := fun x msg => do
+    let coins ← BitString.sampleList (coinLength (P x.1))
+    return encDetWord (P x.1) (keySamplePublicKey (P x.1) x.2) msg coins
+  refine isPPT_mlweWordReduction hP hA b keySamplePublicKey
+    (ComputableInPolyTime.keySamplePublicKey (hP.comp (by fun_prop)) (by fun_prop))
+    ctOf ?_ (keyReduction P A b) ?_
+  · have hL : ComputableInPolyTime (fun p : (ℕ × List Bool) × List Bool => coinLength (P p.1.1))
+        (encPair (encPair encUnary encBits) encBits) encUnary := by
+      have hPκ : ComputableInPolyTime (fun p : (ℕ × List Bool) × List Bool => P p.1.1)
+          (encPair (encPair encUnary encBits) encBits) encParams := hP.comp (by fun_prop)
+      unfold coinLength
+      fun_prop
+    refine (isPPTOn_sampleList.preprocess hL).bind_with ?_
+    let HC := encPair (encPair (encPair encUnary encBits) encBits) encBits
+    have hPHC : ComputableInPolyTime
+        (fun q : ((ℕ × List Bool) × List Bool) × List Bool => P q.1.1.1) HC encParams :=
+      hP.comp (by fun_prop)
+    have hpkHC := ComputableInPolyTime.keySamplePublicKey hPHC
+      (show ComputableInPolyTime (fun q : ((ℕ × List Bool) × List Bool) × List Bool => q.1.1.2)
+        HC encBits by fun_prop)
+    exact (ComputableInPolyTime.encDetWord hPHC hpkHC (by fun_prop) (by fun_prop)).isPPTOn
+  · intro κ M t
+    simp only [keyReduction, mlweKeyReduction, mlweWordReduction, keySamplePublicKey_encodeSample,
+      wordAdversary, ProbComp.eval_bind, ProbComp.eval_map, PMF.bind_map, Function.comp_def]
+    refine congrArg _ (funext fun choice => ?_)
+    simp only [Encryption.ChoiceOut.msg₀, Encryption.ChoiceOut.msg₁, Encryption.ChoiceOut.msgs,
+      Encryption.ChoiceOut.state, select_getD]
+    by_cases hv : (kpke P).IsMessagePair κ (encodePublicKey (M, t)) choice.1.1 choice.1.2 = true
+    · simp only [hv, ite_true, ctOf, keySamplePublicKey_encodeSample, ProbComp.eval_bind]
+      have h := congrArg (fun μ => μ.bind fun ct => ProbComp.eval (A.guess κ choice.2 ct))
+        (eval_encDetWord_sampleList (P κ) (M, t) (if b then choice.1.2 else choice.1.1))
+      simpa only [ProbComp.eval_bind, ProbComp.eval_map, PMF.bind_map, Function.comp_def] using
+        h.symm
+    · simp only [hv, Bool.false_eq_true, ite_false, PMF.bind_const]
+
+/-- **The ciphertext hop is uniform strict PPT** when the parameters are computable in polynomial
+time and `A` is uniform strict PPT. -/
+theorem isPPT_ciphertextReduction [∀ κ, NeZero (P κ).q]
+    (hP : ComputableInPolyTime P encUnary encParams) {A : Encryption.WordAdversary}
+    (hA : A.IsPPT) (b : Bool) : (ciphertextReduction P A b).IsPPT := by
+  refine isPPT_mlweWordReduction hP hA b extendedSamplePublicKey
+    (ComputableInPolyTime.extendedSamplePublicKey (hP.comp (by fun_prop)) (by fun_prop))
+    (fun x msg => pure (extendedSampleCiphertext (P x.1) x.2 msg))
+    (ComputableInPolyTime.extendedSampleCiphertext
+      (hP.comp (by fun_prop)) (by fun_prop) (by fun_prop)).isPPTOn
+    (ciphertextReduction P A b) ?_
+  intro κ M w
+  simp only [ciphertextReduction, mlweReduction, mlweWordReduction,
+    extendedSamplePublicKey_encodeSample, extendedSampleCiphertext_encodeSample, wordAdversary,
+    ProbComp.eval_bind, ProbComp.eval_map, PMF.bind_map, Function.comp_def]
+  refine congrArg _ (funext fun choice => ?_)
+  simp only [Encryption.ChoiceOut.msg₀, Encryption.ChoiceOut.msg₁, Encryption.ChoiceOut.msgs,
+    Encryption.ChoiceOut.state, select_getD]
+  split_ifs <;> simp only [ProbComp.eval_bind, ProbComp.eval_pure, PMF.pure_bind]
 
 end Reductions
 
@@ -637,7 +607,9 @@ theorem eval_sampleVecCBD (k n q η : ℕ) [NeZero q] :
 /-- **IND-CPA of K-PKE with ideal coin expansion and the matrix in the public key** (fair coins in
 place of `PRF`; no `XOF` or `G` oracles), a step towards Kyber v3.02 Theorem 1 ([AvanziEtAl2021],
 §4.3.1, p. 20) and not that theorem, which assumes that `XOF` and `G` are random oracles and whose
-bound has an `Adv^prf` term. The `PRF` hop and the random-oracle lift are open under
+bound has an `Adv^prf` term. The `PRF` hop is `indCPA_kpkePRF_of_decisionModuleLWEWith`, which
+applies this one to its last game and keeps the matrix in the public key; the random-oracle lift is
+open under
 [#5293](https://github.com/cslib-community/cslib-frontier/issues/5293#issuecomment-6893099765).
 
 Let `P` be a K-PKE parameter family computable in polynomial time from the unary security

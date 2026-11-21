@@ -87,7 +87,7 @@ private theorem run_duplicatedRequests :
         ([⟨false, true⟩, ⟨false, false⟩] : OracleComp.Transcript (fun _ : Bool => Bool))) := by
   simp only [duplicatedRequests, ProbOracleComp.runWith_bind, ProbOracleComp.runWith_sample,
     ProbOracleComp.runWith_query, ProbOracleComp.runWith_pure]
-  simp [OracleComp.withTranscript, flipOracle, Function.comp_def]
+  simp [OracleComp.withTranscript_apply_pmf, flipOracle, Function.comp_def]
 
 example : ¬duplicatedRequests.IsQueryBounded 1 := by
   intro h
@@ -163,7 +163,7 @@ private theorem requestHead_isOraclePPTOn : IsOraclePPTOn encBits encBits reques
 
 -- Parameterization retains the concrete client's external call and its entire private-state law.
 private theorem requestHead_isOraclePPT : IsOraclePPT encBits (fun _ word => requestHead word) :=
-  IsOraclePPTOn.isOraclePPT (IsOraclePPTOn.query_take' () (.const []) (.const 1))
+  IsOraclePPTOn.isOraclePPT (IsOraclePPTOn.query_take () (.const []) (.const 1))
 
 -- The resource contracts derive uniform query budgets for `requestHead` on the empty input.
 example :
@@ -275,7 +275,7 @@ example (n : ℕ) :
         fun state : ℕ => PMF.pure (List.replicate n true, state + 1))) (requestHead []) (7, []) =
       PMF.pure ((List.replicate n true).take 1, 8, [⟨((), []), List.replicate n true⟩]) := by
   rw [requestHead, ProbOracleComp.runWith_map, ProbOracleComp.runWith_query]
-  simp [OracleComp.withTranscript]
+  simp [OracleComp.withTranscript_apply_pmf]
 
 -- Returning an unrestricted oracle reply cannot satisfy a uniform strict polynomial clock.
 example : ¬ IsOraclePPTOn encBits encBits

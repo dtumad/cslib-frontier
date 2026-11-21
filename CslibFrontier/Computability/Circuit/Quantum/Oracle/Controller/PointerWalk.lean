@@ -9,6 +9,7 @@ module
 
 public import CslibFrontier.Computability.Circuit.Quantum.Oracle.Controller.Program
 public import CslibFrontier.Computability.Probabilistic.Oracle.Parameter
+import CslibFrontier.Computability.Machines.Turing.MultiTape.Internal.PolyTimeListPrimitives
 import CslibFrontier.Tactic.SuppCases
 
 /-!
@@ -89,7 +90,7 @@ classical word is unused; the device keeps all three qubits throughout the run. 
 
 /-- The phase subroutine's native machine branches only on its one-bit classical address. -/
 theorem isOraclePPTOn_phase : IsOraclePPTOn encBool encBool phase := by
-  apply IsOraclePPTOn.finite_cases' (branch := fun address _ => phase address)
+  apply IsOraclePPTOn.finite_cases (branch := fun address _ => phase address)
     ComputableInPolyTime.id'
   intro address
   unfold phase
@@ -105,7 +106,7 @@ theorem isOraclePPTOn_round : IsOraclePPTOn encBool encBool round :=
 /-- One native machine generates the entire adaptive loop. The encoded classical loop state has
 length exactly one under every possible word reply, so its growth allowance is zero. -/
 theorem isOraclePPTOn_walk : IsOraclePPTOn encUnary encBool walk := by
-  refine IsOraclePPTOn.iterate_of_bounded_growth' (growth := 0)
+  refine IsOraclePPTOn.iterate_of_bounded_growth (growth := 0)
     ComputableInPolyTime.id' (.const false) isOraclePPTOn_round ?_
   intro address next _
   simp only [encBool_apply, List.length_singleton, Nat.add_zero, le_refl]
@@ -121,7 +122,7 @@ theorem isOraclePPT_program : IsOraclePPT encBool program := by
   apply IsOraclePPTOn.isOraclePPT
   unfold program
   apply (isOraclePPTOn_prepare (encPair encUnary encBits)).bind_with
-  apply (isOraclePPTOn_walk.preprocess' (by fun_prop)).bind
+  apply (isOraclePPTOn_walk.preprocess (by fun_prop)).bind
   exact (isOraclePPTOn_gate encBool _).bind
     (isOraclePPTOn_requestBit encUnit (.inl .measure) (.const (encUnary 0)))
 
@@ -184,7 +185,7 @@ private theorem transcript_cost_phase {State : Type} (cost : Operation → ℕ)
         2 * cost (.inl .gate) + cost (.inl .query) := by
   supp_cases h [phase, gate, command, ProbOracleComp.runWith_bind,
     ProbOracleComp.runWith_map, ProbOracleComp.runWith_query,
-    ProbOracleComp.runWith_pure, OracleComp.withTranscript_apply]
+    ProbOracleComp.runWith_pure, OracleComp.withTranscript_apply_pmf]
   simp only [Prod.map_snd, id_eq, List.map_cons, List.sum_cons]
   omega
 
@@ -203,7 +204,7 @@ private theorem transcript_cost_round {State : Type} (cost : Operation → ℕ)
   obtain ⟨⟨next, middle, seen⟩, hnext, hphase⟩ := h
   have hcost := transcript_cost_phase cost oracle next hphase
   supp_cases hnext [requestBit, ProbOracleComp.runWith_map,
-    ProbOracleComp.runWith_query, OracleComp.withTranscript_apply]
+    ProbOracleComp.runWith_query, OracleComp.withTranscript_apply_pmf]
   simp only [List.map_cons, List.sum_cons] at hcost
   dsimp only [Prod.map, id] at hcost ⊢
   omega
@@ -243,7 +244,7 @@ private theorem transcript_cost_prepare {State : Type} (cost : Operation → ℕ
         3 * cost (.inl .gate) := by
   supp_cases h [prepare, gate, command, ProbOracleComp.runWith_bind,
     ProbOracleComp.runWith_map, ProbOracleComp.runWith_query,
-    ProbOracleComp.runWith_pure, OracleComp.withTranscript_apply]
+    ProbOracleComp.runWith_pure, OracleComp.withTranscript_apply_pmf]
   simp only [Prod.map_snd, id_eq, List.map_cons, List.sum_cons]
   omega
 
@@ -268,7 +269,7 @@ theorem transcript_cost_program {State : Type} (cost : Operation → ℕ)
   have hfirst := transcript_cost_prepare cost oracle hprepare
   have hsecond := transcript_cost_walk cost oracle count hwalk
   supp_cases h [gate, command, requestBit, ProbOracleComp.runWith_bind,
-    ProbOracleComp.runWith_map, ProbOracleComp.runWith_query, OracleComp.withTranscript_apply]
+    ProbOracleComp.runWith_map, ProbOracleComp.runWith_query, OracleComp.withTranscript_apply_pmf]
   simp only [List.map_nil, List.sum_nil, Nat.zero_add] at hfirst
   simp only [Prod.map_snd, id_eq, List.map_cons, List.sum_cons]
   rw [hsecond, hfirst]

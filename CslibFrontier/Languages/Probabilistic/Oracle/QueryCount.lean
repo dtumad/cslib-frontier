@@ -55,7 +55,11 @@ namespace Cslib.ProbOracleComp
 
 open OracleComp
 
-variable {Query α β : Type} {spec : Query → Type}
+universe u
+
+section
+
+variable {Query : Type u} {α β : Type} {spec : Query → Type}
 
 /-- The program makes at most `n` external queries on every path, whatever its private samples and
 the replies. Private samples are free. -/
@@ -74,8 +78,8 @@ theorem isCostBounded_sample (cost : Query → ℕ) (program : ProbComp α) :
   | pure a => exact .pure a 0
   | query_bind n cont ih =>
     have hquery : sample (spec := spec) (OracleComp.query n) = OracleComp.query (Sum.inl n) :=
-      OracleComp.interpret_query _ _
-    rw [sample_bind, hquery]
+      OracleComp.substitute_query _ _
+    rw [sample_freeMBind, hquery]
     simpa using (IsCostBounded.query (Sum.inl n)).bind fun a => ih a
 
 /-- A single external query costs its cost. -/
@@ -131,7 +135,11 @@ theorem QueriesSatisfy.of_forall {p : Query → Prop} (hp : ∀ q, p q)
     (program : ProbOracleComp spec α) : program.QueriesSatisfy p :=
   OracleComp.QueriesSatisfy.of_forall (fun q => by cases q <;> simp [hp]) program
 
+end
+
 /-! ### Logged executions -/
+
+variable {Query α β : Type} {spec : Query → Type}
 
 /-- Against every stateful oracle, the external queries recorded on a supported run cost at most
 the budget. Private samples are not recorded. -/
@@ -147,14 +155,15 @@ theorem transcript_cost_le {cost : Query → ℕ} {program : ProbOracleComp spec
     supp_cases hmem [runWith_pure]
     simp
   | liftBind q cont n _ ih =>
-    supp_cases hmem [ProbOracleComp.runWith, OracleComp.runWith, interpret_bind,
-      OracleComp.interpret_query, StateT.run_bind] with ⟨⟨a, middle, seen⟩, hfirst, hrest⟩
+    supp_cases hmem [ProbOracleComp.runWith, OracleComp.runWith_bind,
+      OracleComp.runWith_query]
+      with ⟨⟨a, middle, seen⟩, hfirst, hrest⟩
     cases q with
     | inl k =>
       supp_cases hfirst [sumHandler, StateT.run_lift] with ⟨_, -, rfl, rfl, rfl⟩
-      simpa using ih a hrest
+      simpa using ih _ hrest
     | inr q =>
-      supp_cases hfirst [sumHandler, StateT.run, withTranscript_apply]
+      supp_cases hfirst [sumHandler, StateT.run, withTranscript_apply_pmf]
         with ⟨⟨answer, next⟩, -, rfl, rfl, rfl⟩
       change _ ∈ (runWith _ _ _).support at hrest
       rw [run_interpret_withTranscript_append] at hrest
@@ -208,13 +217,13 @@ theorem isCostBounded_of_transcript_cost_le [hne : ∀ q, Nonempty (spec q)] {co
           | some state => (oracle q' state).map fun (b, state') => (b, some state')
         have hlift := runWith_map_state (withTranscript oracle) (withTranscript oracle')
           (fun state => (some state.1, state.2)) (fun q' state => by
-            simp [withTranscript_apply, oracle', PMF.map_comp, Function.comp_def]) (cont a) (s, [])
+            simp [withTranscript_apply_pmf, oracle', PMF.map_comp, Function.comp_def]) (cont a) (s, [])
         have hwhole := h (Option State) oracle' none (some s') result
           (transcript ++ [⟨q, a⟩]) (by
             rw [hrun, PMF.mem_support_bind_iff]
             refine ⟨(a, some s, [⟨q, a⟩]), ?_, ?_⟩
             · change (a, some s, [⟨q, a⟩]) ∈ ((withTranscript oracle' q) (none, [])).support
-              simp only [withTranscript_apply, PMF.monad_map_eq_map, PMF.mem_support_map_iff]
+              simp only [withTranscript_apply_pmf, PMF.mem_support_map_iff]
               exact ⟨(a, some s), by simp [oracle', first], rfl⟩
             · rw [run_interpret_withTranscript_append, PMF.mem_support_map_iff]
               refine ⟨(result, some s', transcript), ?_, rfl⟩

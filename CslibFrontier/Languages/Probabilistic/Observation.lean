@@ -23,7 +23,8 @@ This covers transcripts, response-sensitive statistics and accumulated execution
   with adaptive execution.
 * `run_interpret_withObserver_prod`: two observers can be fused into one product observer.
 
-The state-extension and projection pattern follows the stateful handler combinators in PolyFun.
+This specializes PolyFun’s `PFunctor.Handler.Stateful.extend` and its projection law to
+CSLib’s oracle-program interpreter.
 The statements use the existing `OracleComp` interpreter and hold for any lawful base monad.
 -/
 
@@ -56,6 +57,14 @@ def withObserver (oracle : (q : Query) → StateT State m (Response q))
 
 variable [LawfulMonad m]
 
+/-- Erasing the observation from a single answer retains its reply and final private state. -/
+theorem map_fst_withObserver (oracle : (q : Query) → StateT State m (Response q))
+    (update : (q : Query) → State → Response q → State → Obs → Obs)
+    (q : Query) (state : State × Obs) :
+    (fun (answer, next, _) => (answer, next)) <$> withObserver oracle update q state =
+      oracle q state.1 := by
+  simp [Functor.map_map]
+
 /-- Forgetting observation preserves the result and the complete final private state. -/
 theorem run_interpret_withObserver (oracle : (q : Query) → StateT State m (Response q))
     (update : (q : Query) → State → Response q → State → Obs → Obs)
@@ -63,9 +72,8 @@ theorem run_interpret_withObserver (oracle : (q : Query) → StateT State m (Res
     (fun (result, state, _) => (result, state)) <$>
         (interpret (withObserver oracle update) program).run (s, observation) =
       (interpret oracle program).run s := by
-  apply run_interpret_map_state (withObserver oracle update) oracle Prod.fst
-  rintro q ⟨s, observation⟩
-  simp [Functor.map_map]
+  apply map_state_run_interpret (withObserver oracle update) oracle Prod.fst
+  exact map_fst_withObserver oracle update
 
 /-- Transport the private state and observation together when both the oracle transition and
 the observation update respect their representations. -/
@@ -83,7 +91,7 @@ theorem run_interpret_withObserver_map {State' Obs' : Type v}
     (fun (a, s', o') => (a, represent s', observe o')) <$>
         (interpret (withObserver oracle update) program).run (s, o) =
       (interpret (withObserver oracle' update') program).run (represent s, observe o) := by
-  apply run_interpret_map_state _ _ (Prod.map represent observe)
+  apply map_state_run_interpret _ _ (Prod.map represent observe)
   rintro q ⟨s, o⟩
   simp only [Prod.map_apply, withObserver_apply]
   rw [← step q s]
@@ -101,7 +109,7 @@ theorem run_interpret_withObserver_prod {Obs' : Type v}
           (fun q before a after y => second q before.1 a after.1 y)) program).run ((s, o), o') =
       (interpret (withObserver oracle (fun q before a after (x, y) =>
         (first q before a after x, second q before a after y))) program).run (s, o, o') := by
-  apply run_interpret_map_state (m := m) _ _
+  apply map_state_run_interpret (m := m) _ _
     (fun (state : (State × Obs) × Obs') => (state.1.1, state.1.2, state.2))
   rintro q ⟨⟨s', x⟩, y⟩
   simp [Functor.map_map]

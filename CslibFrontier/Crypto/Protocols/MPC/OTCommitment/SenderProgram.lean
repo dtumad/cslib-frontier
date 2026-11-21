@@ -303,7 +303,7 @@ theorem senderIdealProgram_schedule
       [.inr (), .inl (if release then .open else .abort), .inr (), .inl (.commit committed)] := by
   simp only [pmf_norm, senderIdealProgram, ProbOracleComp.runWith_bind,
     ProbOracleComp.runWith_query, ProbOracleComp.runWith_sample, ProbOracleComp.runWith_pure,
-    OracleComp.withTranscript_apply, Phased.handler, OracleComp.sumHandler, Phased.advance,
+    OracleComp.withTranscript_apply_pmf, Phased.handler, OracleComp.sumHandler, Phased.advance,
     Phased.observe] at h
   simp only [PMF.mem_support_bind_iff] at h
   obtain ⟨⟨tables, final⟩, _, choices, _, ⟨submission, out⟩, _, h⟩ := h

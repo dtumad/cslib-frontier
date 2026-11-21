@@ -7,6 +7,7 @@ Authors: Samuel Schlesinger
 module
 -- upstream: candidate
 
+public import CslibFrontier.Computability.Machines.Turing.MultiTape.Encodings.Finite
 public import CslibFrontier.Computability.Machines.Turing.MultiTape.Encodings.Decoder
 public import CslibFrontier.Computability.Machines.Turing.MultiTape.Encodings.Structure
 public import CslibFrontier.Computability.Probabilistic.Oracle.Parameter
@@ -15,6 +16,7 @@ public import CslibFrontier.Computability.Probabilistic.UniformNat
 public import CslibFrontier.Crypto.Computational.Encryption.Basic
 public import CslibFrontier.Crypto.Game.Hybrid
 public import CslibFrontier.Crypto.Encoding
+import Mathlib.Data.List.GetD
 import CslibFrontier.Computability.Machines.Turing.MultiTape.Complexity.PolyTime.Captured
 import CslibFrontier.Computability.Machines.Turing.MultiTape.Complexity.PolyTime.List
 import CslibFrontier.Computability.Machines.Turing.MultiTape.Complexity.PolyTime.Membership
@@ -22,12 +24,9 @@ import CslibFrontier.Computability.Machines.Turing.MultiTape.Complexity.PolyTime
 import CslibFrontier.Computability.Machines.Turing.MultiTape.Complexity.PolyTime.Nat.Eq
 import CslibFrontier.Computability.Machines.Turing.MultiTape.Complexity.PolyTime.Plain
 import CslibFrontier.Crypto.Computational.Encryption.DecryptionBound
-import CslibFrontier.Crypto.Negligible.Basic
-import CslibFrontier.Crypto.Negligible.Dyadic
-import CslibFrontier.Languages.Probabilistic.Oracle.Simulation
+import CslibFrontier.Languages.Probabilistic.Oracle.Simulation.Handler
 import CslibFrontier.Probability.PMF.Bind
 import CslibFrontier.Probability.PMF.BindCompare
-import CslibFrontier.Probability.PMF.Event
 import CslibFrontier.Probability.PMF
 import CslibFrontier.Tactic.PolyTime
 import CslibFrontier.Tactic.PPT
@@ -243,8 +242,22 @@ And the two-phase decomposition of the 1CCA experiment (printed pp. 468–469):
   `Cslib.Crypto.Encryption.isQueryBounded_cca2MultiToSingle`,
   `Cslib.Crypto.Encryption.cca2MultiHybridGameOn_step_gap`,
   `Cslib.Crypto.Encryption.cca2MultiGameOn_gap`,
-  `Cslib.Crypto.Encryption.advantage_cca2MultiGameOn`,
-  `Cslib.Crypto.Encryption.INDCCA2On.indcca2MultiOn`,
+  `Cslib.Crypto.Encryption.advantage_cca2MultiGameOn`: the batch-challenge hybrid reduction is
+  strict oracle PPT and preserves the decryption-query bounds, and the batch-challenge advantage
+  is `dyadicSize (Q n)` times its 1CCA advantage.
+
+## Steps toward Theorem 12.1
+
+[BonehShoup2023], Theorem 12.1 (printed p. 468) concerns Attack Game 12.1 (p. 467), in which
+encryption and decryption queries are adaptively interleaved. It is
+`Cslib.Crypto.Encryption.INDCCA2On.indcca2InterleavedOn` and
+`Cslib.Crypto.Encryption.indcca2InterleavedOn_iff_indcca2On` in
+`CslibFrontier/Crypto/Computational/Encryption/CCA/Interleaved.lean`. The theorems below are its
+restriction to adversaries that submit all challenge pairs in one batch between the two phases of
+decryption queries; `Interleaved.lean` uses them to relate the two notions
+(`indcca2InterleavedOn_iff_indcca2MultiOn`).
+
+* `Cslib.Crypto.Encryption.INDCCA2On.indcca2MultiOn`,
   `Cslib.Crypto.Encryption.indcca2MultiOn_iff_indcca2On`,
   `Cslib.Crypto.Encryption.INDCCA2Of.indcca2MultiOf`,
   `Cslib.Crypto.Encryption.indcca2MultiOf_iff_indcca2Of`,
@@ -252,9 +265,7 @@ And the two-phase decomposition of the 1CCA experiment (printed pp. 468–469):
   `Cslib.Crypto.Encryption.indcca2Multi_iff_indcca2`,
   `Cslib.Crypto.Encryption.WordINDCCA2.wordINDCCA2Multi`,
   `Cslib.Crypto.Encryption.wordINDCCA2Multi_iff_wordINDCCA2`: single-challenge 1CCA implies
-  batch-challenge multi-challenge CCA via the hybrid reduction (batch-challenge specialization of
-  [BonehShoup2023], Theorem 12.1), and their equivalence (Theorem 12.1 together with
-  Definition 12.2).
+  batch-challenge multi-challenge CCA, and the two are equivalent.
 
 ## References
 
@@ -323,7 +334,8 @@ theorem CCA2AdversaryOf.IsPPT.query_bounds {Msg : Type} {encMsg : Msg ↪ List B
     have hpoly := Nat.mul_le_mul_left c₂ (Nat.pow_le_pow_left hsize d₂)
     rw [Nat.mul_pow, ← Nat.mul_assoc] at hpoly
     exact (hguess (n, state, ct)).1.mono hpoly
-  · have hbound := hlen (n, pk) State oracle s s' choice hmem
+  · rw [← ProbOracleComp.runWith_eq_run_interpret] at hmem
+    have hbound := hlen (n, pk) State oracle s s' choice hmem
     have hstate : choice.2.length ≤ (encPair (encPair encMsg encMsg) encBits choice).length := by
       enc_len
     have hsize : (encPair encUnary encBits (n, pk)).length + 1 ≤
@@ -578,7 +590,7 @@ private theorem isPPTOn_run_cca2Phase2Oracle_of_guess {Challenge Out : Type}
       (fun pair : (ℕ × List Bool × List Bool × Challenge) × ((Unit × List Bool) × Unit) =>
         if blocked pair.2.1.2 pair.1.2.2.2 then pure ([], pair.2.2)
         else pure (encOption encOut (decrypt pair.1.1 pair.1.2.1 pair.2.1.2), pair.2.2)) :=
-    IsPPTOn.cond' hguard hnoReply
+    IsPPTOn.cond hguard hnoReply
       ((ComputableInPolyTime.prod hdecWord (by fun_prop)).isPPTOn)
   have hres : ComputableInPolyTime
       (fun pair : (ℕ × List Bool × List Bool × Challenge) × List Bool =>
@@ -730,7 +742,7 @@ theorem isPPTOn_cca2GameOn {Msg Out : Type} {encMsg : Msg ↪ List Bool} {encOut
           return guessOut.1
         else
           return false) :=
-    IsPPTOn.cond' hvalidStep (hencStep.bind_with hphase2Bool)
+    IsPPTOn.cond hvalidStep (hencStep.bind_with hphase2Bool)
       (ComputableInPolyTime.const false).isPPTOn
   exact hkeyGen.bind_with (hphase1.bind_with hbranch)
 
@@ -844,7 +856,7 @@ theorem CCA2AdversaryOf.IsPPT.restrict {Msg : Type} {encMsg : Msg ↪ List Bool}
         (ComputableInPolyTime.prod
           (ComputableInPolyTime.bitsTail.comp (by dsimp only [EGuess]; fun_prop))
           (by dsimp only [EGuess]; fun_prop))
-    exact IsOraclePPTOn.cond' hcond (hadversary.guess.preprocess' hprep)
+    exact IsOraclePPTOn.cond hcond (hadversary.guess.preprocess hprep)
       (ComputableInPolyTime.const false).isOraclePPTOn
 
 /-- Unrestricted 1CCA security implies 1CCA security under every polynomial-time admissibility
@@ -1056,7 +1068,8 @@ theorem MultiCCA2AdversaryOf.IsPPT.query_bounds {Msg : Type} {encMsg : Msg ↪ L
     have hpoly := Nat.mul_le_mul_left c₂ (Nat.pow_le_pow_left hsize d₂)
     rw [Nat.mul_pow, ← Nat.mul_assoc] at hpoly
     exact (hguess (n, state, cts)).1.mono hpoly
-  · have hbound := hlen (n, pk) State oracle s s' choice hmem
+  · rw [← ProbOracleComp.runWith_eq_run_interpret] at hmem
+    have hbound := hlen (n, pk) State oracle s s' choice hmem
     have hchallenges :
         choice.1.length ≤ (encPair (encList (encPair encMsg encMsg)) encBits choice).length := by
       have hlist := length_le_length_encList (encPair encMsg encMsg) choice.1
@@ -1365,7 +1378,7 @@ theorem isPPTOn_cca2MultiGameOn {Msg Out : Type} {encMsg : Msg ↪ List Bool}
           return guessOut.1
         else
           return false) :=
-    IsPPTOn.cond' hvalidStep (hencStep.bind_with hphase2Bool)
+    IsPPTOn.cond hvalidStep (hencStep.bind_with hphase2Bool)
       (ComputableInPolyTime.const false).isPPTOn
   exact hkeyGen.bind_with (hphase1.bind_with hbranch)
 
@@ -1491,7 +1504,7 @@ theorem MultiCCA2AdversaryOf.IsPPT.restrict {Msg : Type} {encMsg : Msg ↪ List 
         (ComputableInPolyTime.prod
           (ComputableInPolyTime.bitsTail.comp (by dsimp only [EGuess]; fun_prop))
           (by dsimp only [EGuess]; fun_prop))
-    exact IsOraclePPTOn.cond' hcond (hadversary.guess.preprocess' hprep)
+    exact IsOraclePPTOn.cond hcond (hadversary.guess.preprocess hprep)
       (ComputableInPolyTime.const false).isOraclePPTOn
 
 /-- Unrestricted batch-challenge multi-challenge CCA security implies batch-challenge
@@ -1554,7 +1567,7 @@ theorem CCA2AdversaryOf.isPPT_toMulti {Msg : Type} {encMsg : Msg ↪ List Bool}
     have hstate : ComputableInPolyTime
         (fun choice : (Msg × Msg) × List Bool => choice.2) EIn encBits :=
       ComputableInPolyTime.snd _ _
-    exact (hA.choose.on.map' (ComputableInPolyTime.prod hsingleton hstate)).isOraclePPT
+    exact (hA.choose.on.map (ComputableInPolyTime.prod hsingleton hstate)).isOraclePPT
   guess := by
     let EGuess := encPair encUnary (encPair encBits (encList encBits))
     have hhead : ComputableInPolyTime
@@ -1566,7 +1579,7 @@ theorem CCA2AdversaryOf.isPPT_toMulti {Msg : Type} {encMsg : Msg ↪ List Bool}
         EGuess (encPair encUnary (encPair encBits encBits)) :=
       ComputableInPolyTime.prod (by dsimp only [EGuess]; fun_prop)
         (ComputableInPolyTime.prod (by dsimp only [EGuess]; fun_prop) hhead)
-    exact hA.guess.preprocess' hprep
+    exact hA.guess.preprocess hprep
 
 /-- Embedding a strict oracle PPT bit `CCA2Adversary` yields a strict oracle PPT
 `MultiCCA2Adversary`. -/
@@ -1663,7 +1676,7 @@ theorem WordINDCCA2Multi.wordINDCCA2
     WordINDCCA2 keyGen encrypt decrypt :=
   INDCCA2MultiOn.indcca2On h
 
-/-! ### Single-challenge 1CCA implies batch-challenge CCA (Theorem 12.1) -/
+/-! ### Single-challenge 1CCA implies batch-challenge CCA (step toward Theorem 12.1) -/
 
 open scoped NNReal
 
@@ -1747,16 +1760,10 @@ theorem eval_run_multiPhase2FilterHandler {Out α : Type}
       prog).run ()) := by
   rw [OracleComp.interpret_map, StateT.run_map, ProbComp.eval_map,
     ProbOracleComp.eval_run_interpret_eq_runWith, ProbOracleComp.eval_run_interpret_eq_runWith,
-    ProbOracleComp.runWith_run_interpret, PMF.map_comp]
-  have hsim := ProbOracleComp.runWith_map_state
-    (oracle := fun q s => ProbComp.eval (cca2MultiPhase2Oracle encOut decrypt n sk cts q s))
-    (oracle' := fun q (state : Unit × Unit) =>
-      (ProbOracleComp.runWith
-          (fun q s => ProbComp.eval (cca2Phase2Oracle encOut decrypt n sk ct q s))
-          ((multiPhase2FilterHandler decBound cts q).run state.1) state.2).map
-          (fun result => (result.1.1, result.1.2, result.2)))
-    (represent := fun _ : Unit => ((), ()))
-    (step := by
+    ProbOracleComp.runWith_run_interpret_map (multiPhase2FilterHandler decBound cts)
+      (fun q s => ProbComp.eval (cca2Phase2Oracle encOut decrypt n sk ct q s))
+      (fun q s => ProbComp.eval (cca2MultiPhase2Oracle encOut decrypt n sk cts q s))
+      (fun _ => ()) (fun _ => ()) (by
       intro ⟨⟨⟩, req⟩ ⟨⟩
       change (ProbComp.eval (cca2MultiPhase2Oracle encOut decrypt n sk cts ((), req) ())).map
           (fun x => (x.1, (), ())) =
@@ -1773,11 +1780,8 @@ theorem eval_run_multiPhase2FilterHandler {Out α : Type}
           ProbOracleComp.runWith_map, ProbOracleComp.runWith_query, cca2Phase2Oracle, hne,
           ProbComp.eval_pure, PMF.pure_map]
         simp only [Prod.map_apply, id_eq, List.take_of_length_le (hdecBound req)])
-    prog ()
-  have hfst := congrArg (PMF.map fun x => (x.1, ())) hsim.symm
-  have hid1 : (fun x : α × (Unit × Unit) => (x.1, ())) = fun x => (x.1, x.2.2) := rfl
-  have hid2 : (fun x : α × Unit => (x.1, ())) = id := rfl
-  simpa only [PMF.map_comp, Function.comp_def, hid1, hid2, PMF.map_id] using hfst
+      prog (), PMF.map_comp]
+  exact (congrArg (PMF.map · _) (funext fun _ => rfl : _ = id)).trans (PMF.map_id _)
 
 /-- Continuation of the multi-challenge hybrid experiment at index `split : ℕ` after
 `(keys, choice)` have been sampled. -/
@@ -1931,7 +1935,7 @@ theorem isOraclePPTOn_cca2MultiToSingleAt_choose {Msg : Type} [Inhabited Msg]
   let E4 := encPair E3 (encList encBits)
   have hchooseA : IsOraclePPTOn (Operation := Unit) ECaller EChoiceOut
       (fun caller : (ℕ × List Bool) × ℕ => adversary.choose caller.1.1 caller.1.2) :=
-    hA.choose.on.preprocess' (by dsimp only [ECaller]; fun_prop)
+    hA.choose.on.preprocess (by dsimp only [ECaller]; fun_prop)
   have hchallenges : ComputableInPolyTime
       (fun q : ((ℕ × List Bool) × ℕ) × (List (Msg × Msg) × List Bool) => q.2.1)
       E2 (encList (encPair encMsg encMsg)) :=
@@ -2102,11 +2106,11 @@ theorem isOraclePPTOn_cca2MultiToSingleAt_choose {Msg : Type} [Inhabited Msg]
             ((q.2.1.drop (q.1.2 + 1)).mapM (fun p => encrypt q.1.1.1 q.1.1.2 p.1))
         return (q.2.1.getD q.1.2 (default, default),
           encMultiCCA2State ⟨true, q.2.2, ctsFront, ctsBack⟩)) := by
-    simpa only [bind_pure_comp] using hfront.bind_with (hback.map_with' hpost)
+    simpa only [bind_pure_comp] using hfront.bind_with (hback.map_with hpost)
   have hno : IsOraclePPTOn (Operation := Unit) E2 (encPair (encPair encMsg encMsg) encBits)
       (fun _ => pure ((default, default), rejectMultiCCA2State)) :=
     (ComputableInPolyTime.const ((default, default), rejectMultiCCA2State)).isOraclePPTOn
-  exact hchooseA.bind_with (IsOraclePPTOn.cond' hcond hyes hno)
+  exact hchooseA.bind_with (IsOraclePPTOn.cond hcond hyes hno)
 
 /-- Phase 2 (`guess`) of `cca2MultiToSingleAt` is uniformly strict oracle PPT in
 `(n, state, ct)`. -/
@@ -2206,7 +2210,7 @@ theorem isOraclePPTOn_cca2MultiToSingleAt_guess {Msg : Type} [Inhabited Msg]
               p.2.2 :: (multiCCA2StateDecoder.decode p.2.1).ctsBack))).run ()) := by ppt
   have hno : IsOraclePPTOn (Operation := Unit) EGuess encBool (fun _ => pure false) :=
     (ComputableInPolyTime.const false).isOraclePPTOn
-  exact IsOraclePPTOn.cond' hactive hyes hno
+  exact IsOraclePPTOn.cond hactive hyes hno
 
 /-- `cca2MultiToSingleAt` preserves strict oracle PPT admissibility (`CCA2AdversaryOf.IsPPT`). -/
 theorem isPPT_cca2MultiToSingleAt {Msg : Type} [Inhabited Msg]
@@ -2228,7 +2232,7 @@ theorem isPPT_cca2MultiToSingleAt {Msg : Type} [Inhabited Msg]
     (cca2MultiToSingleAt valid encrypt decBound adversary split).IsPPT encMsg where
   choose := by
     have h := (isOraclePPTOn_cca2MultiToSingleAt_choose (decBound := decBound)
-      hvalid hencrypt hA).preprocess'
+      hvalid hencrypt hA).preprocess
       (ComputableInPolyTime.prod ComputableInPolyTime.id' (ComputableInPolyTime.const split))
     exact h.isOraclePPT
   guess := isOraclePPTOn_cca2MultiToSingleAt_guess valid encrypt hdecBound hA split
@@ -2559,11 +2563,10 @@ theorem cca2MultiHybridGameOn_step_gap {Msg Out : Type} [Inhabited Msg]
   simp only [Game.succProbability, ENNReal.coe_toNNReal_eq_toReal]
   linarith
 
-/-- **Quantitative signed hybrid gap for batch-challenge multi-challenge CCA** (batch-challenge
-specialization of [BonehShoup2023], Theorem 12.1, printed p. 468): when every supported Phase 1
-challenge list has length at most `Q n`, the batch-challenge multi-challenge signed
-success-probability gap equals `dyadicSize (Q n)` times the single-challenge 1CCA gap of
-`cca2MultiToSingle`. -/
+/-- Signed hybrid gap for batch-challenge multi-challenge CCA, a step toward [BonehShoup2023],
+Theorem 12.1 (printed p. 468) for batch challenges only: when every supported Phase 1 challenge
+list has length at most `Q n`, the batch-challenge multi-challenge signed success-probability gap
+equals `dyadicSize (Q n)` times the single-challenge 1CCA gap of `cca2MultiToSingle`. -/
 theorem cca2MultiGameOn_gap {Msg Out : Type} [Inhabited Msg]
     (valid : ℕ → List Bool → Msg → Msg → Bool)
     (encOut : Out ↪ List Bool)
@@ -2620,11 +2623,10 @@ theorem cca2MultiGameOn_gap {Msg Out : Type} [Inhabited Msg]
     eval_cca2GameOn_cca2MultiToSingle]
   simp only [Fin.is_lt, ↓reduceIte]
 
-/-- **Quantitative hybrid advantage bound for batch-challenge multi-challenge CCA**
-(batch-challenge specialization of [BonehShoup2023], Theorem 12.1, printed p. 468): when every
-supported Phase 1 challenge list has length at most `Q n`, the batch-challenge multi-challenge CCA
-advantage equals `dyadicSize (Q n)` times the single-challenge 1CCA advantage of
-`cca2MultiToSingle`. -/
+/-- Hybrid advantage identity for batch-challenge multi-challenge CCA, a step toward
+[BonehShoup2023], Theorem 12.1 (printed p. 468) for batch challenges only: when every supported
+Phase 1 challenge list has length at most `Q n`, the batch-challenge multi-challenge CCA advantage
+equals `dyadicSize (Q n)` times the single-challenge 1CCA advantage of `cca2MultiToSingle`. -/
 theorem advantage_cca2MultiGameOn {Msg Out : Type} [Inhabited Msg]
     (valid : ℕ → List Bool → Msg → Msg → Bool)
     (encOut : Out ↪ List Bool)
@@ -2657,10 +2659,13 @@ theorem advantage_cca2MultiGameOn {Msg Out : Type} [Inhabited Msg]
     cca2MultiGameOn_gap valid encOut keyGen encrypt decrypt decBound Q adversary n hdecBound hQ,
     abs_mul, Nat.abs_cast]
 
-/-- **Single-challenge 1CCA security implies batch-challenge multi-challenge CCA security**
-(batch-challenge specialization of [BonehShoup2023], Theorem 12.1, printed p. 468, in which all
-encryption queries are submitted in one batch between Phase 1 and Phase 2 decryption queries)
-whenever `valid`, `keyGen`, `encrypt`, and `decrypt` are polynomial-time / strict PPT. -/
+/-- Batch-challenge step toward [BonehShoup2023], Theorem 12.1 (printed p. 468), not the cited
+result: single-challenge 1CCA security implies batch-challenge multi-challenge CCA security, in
+which all encryption queries come in one batch between Phase 1 and Phase 2 decryption queries,
+whenever `valid`, `keyGen`, `encrypt`, and `decrypt` are polynomial-time / strict PPT. Attack
+Game 12.1 (p. 467) lets the adversary interleave encryption and decryption queries adaptively;
+Theorem 12.1 for that game is `INDCCA2On.indcca2InterleavedOn`
+(`CslibFrontier/Crypto/Computational/Encryption/CCA/Interleaved.lean`). -/
 theorem INDCCA2On.indcca2MultiOn {Msg Out : Type} [Inhabited Msg]
     {valid : ℕ → List Bool → Msg → Msg → Bool}
     {encMsg : Msg ↪ List Bool} {encOut : Out ↪ List Bool}
@@ -2697,6 +2702,7 @@ theorem INDCCA2On.indcca2MultiOn {Msg Out : Type} [Inhabited Msg]
     have hk := hlenKey n keys hkeys
     simp only [length_encPair, encUnary_apply, List.length_replicate, encBits_apply] at hk
     rw [ProbOracleComp.eval_run_interpret_eq_runWith] at hchoice
+    rw [ProbOracleComp.runWith_eq_run_interpret] at hchoice
     have hch := (hlenCh n keys.1 Unit _ () () (challenges, stateA) hchoice).1
     exact hch.trans (Nat.mul_le_mul_left cq (Nat.pow_le_pow_left (by omega) dq))
   have hsingleNeg := h (cca2MultiToSingle valid encrypt decBound Q adversary)
@@ -2707,9 +2713,11 @@ theorem INDCCA2On.indcca2MultiOn {Msg Out : Type} [Inhabited Msg]
   rw [advantage_cca2MultiGameOn valid encOut keyGen encrypt decrypt decBound Q adversary n
     (hdecBound n) (hQ n)]
 
-/-- **Equivalence of single-challenge 1CCA and batch-challenge multi-challenge CCA security**
-(batch-challenge specialization of [BonehShoup2023], Theorem 12.1 together with Definition 12.2,
-printed p. 468) under any polynomial-time challenge-pair admissibility predicate `valid`. -/
+/-- Batch-challenge step toward [BonehShoup2023], Theorem 12.1 with Definition 12.2 (printed
+p. 468), not the cited result: single-challenge 1CCA security and batch-challenge multi-challenge
+CCA security are equivalent under any polynomial-time challenge-pair admissibility predicate
+`valid`. Batch challenges restrict the adaptively interleaved queries of Attack Game 12.1
+(p. 467); the equivalence for that game is `indcca2InterleavedOn_iff_indcca2On`. -/
 theorem indcca2MultiOn_iff_indcca2On {Msg Out : Type} [Inhabited Msg]
     {valid : ℕ → List Bool → Msg → Msg → Bool}
     {encMsg : Msg ↪ List Bool} {encOut : Out ↪ List Bool}
@@ -2731,9 +2739,9 @@ theorem indcca2MultiOn_iff_indcca2On {Msg Out : Type} [Inhabited Msg]
   ⟨INDCCA2MultiOn.indcca2On,
     INDCCA2On.indcca2MultiOn hvalid hkeyGen hencrypt hdecrypt⟩
 
-/-- **Unrestricted single-challenge 1CCA security implies unrestricted batch-challenge
-multi-challenge CCA security** (batch-challenge specialization of [BonehShoup2023],
-Theorem 12.1). -/
+/-- Batch-challenge step toward [BonehShoup2023], Theorem 12.1, not the cited result:
+unrestricted single-challenge 1CCA security implies unrestricted batch-challenge multi-challenge
+CCA security. Theorem 12.1 for interleaved queries is `INDCCA2Of.indcca2InterleavedOf`. -/
 theorem INDCCA2Of.indcca2MultiOf {Msg Out : Type} [Inhabited Msg]
     {encMsg : Msg ↪ List Bool} {encOut : Out ↪ List Bool}
     {keyGen : ℕ → ProbComp (List Bool × List Bool)}
@@ -2750,9 +2758,9 @@ theorem INDCCA2Of.indcca2MultiOf {Msg Out : Type} [Inhabited Msg]
   INDCCA2On.indcca2MultiOn (ComputableInPolyTime.const true)
     hkeyGen hencrypt hdecrypt h
 
-/-- **Equivalence of unrestricted 1CCA and batch-challenge multi-challenge CCA security**
-(batch-challenge specialization of [BonehShoup2023], Theorem 12.1 together with
-Definition 12.2). -/
+/-- Batch-challenge step toward [BonehShoup2023], Theorem 12.1 with Definition 12.2, not the
+cited result: unrestricted 1CCA and batch-challenge multi-challenge CCA security are
+equivalent. -/
 theorem indcca2MultiOf_iff_indcca2Of {Msg Out : Type} [Inhabited Msg]
     {encMsg : Msg ↪ List Bool} {encOut : Out ↪ List Bool}
     {keyGen : ℕ → ProbComp (List Bool × List Bool)}
@@ -2769,8 +2777,9 @@ theorem indcca2MultiOf_iff_indcca2Of {Msg Out : Type} [Inhabited Msg]
   indcca2MultiOn_iff_indcca2On (ComputableInPolyTime.const true)
     hkeyGen hencrypt hdecrypt
 
-/-- **Bit single-challenge 1CCA security implies bit batch-challenge multi-challenge CCA security**
-(batch-challenge specialization of [BonehShoup2023], Theorem 12.1). -/
+/-- Batch-challenge step toward [BonehShoup2023], Theorem 12.1, not the cited result: bit
+single-challenge 1CCA security implies bit batch-challenge multi-challenge CCA security. Theorem
+12.1 for interleaved queries is `INDCCA2.indcca2Interleaved`. -/
 theorem INDCCA2.indcca2Multi
     {keyGen : ℕ → ProbComp (List Bool × List Bool)}
     {encrypt : ℕ → List Bool → Bool → ProbComp (List Bool)}
@@ -2785,9 +2794,8 @@ theorem INDCCA2.indcca2Multi
     INDCCA2Multi keyGen encrypt decrypt :=
   INDCCA2Of.indcca2MultiOf hkeyGen hencrypt hdecrypt h
 
-/-- **Equivalence of bit 1CCA and bit batch-challenge multi-challenge CCA security**
-(batch-challenge specialization of [BonehShoup2023], Theorem 12.1 together with
-Definition 12.2). -/
+/-- Batch-challenge step toward [BonehShoup2023], Theorem 12.1 with Definition 12.2, not the
+cited result: bit 1CCA and bit batch-challenge multi-challenge CCA security are equivalent. -/
 theorem indcca2Multi_iff_indcca2
     {keyGen : ℕ → ProbComp (List Bool × List Bool)}
     {encrypt : ℕ → List Bool → Bool → ProbComp (List Bool)}
@@ -2801,8 +2809,9 @@ theorem indcca2Multi_iff_indcca2
     INDCCA2Multi keyGen encrypt decrypt ↔ INDCCA2 keyGen encrypt decrypt :=
   indcca2MultiOf_iff_indcca2Of hkeyGen hencrypt hdecrypt
 
-/-- **Word single-challenge 1CCA security implies word batch-challenge multi-challenge CCA
-security** (batch-challenge specialization of [BonehShoup2023], Theorem 12.1). -/
+/-- Batch-challenge step toward [BonehShoup2023], Theorem 12.1, not the cited result: word
+single-challenge 1CCA security implies word batch-challenge multi-challenge CCA security. Theorem
+12.1 for interleaved queries is `WordINDCCA2.wordINDCCA2Interleaved`. -/
 theorem WordINDCCA2.wordINDCCA2Multi
     {keyGen : ℕ → ProbComp (List Bool × List Bool)}
     {encrypt : ℕ → List Bool → List Bool → ProbComp (List Bool)}
@@ -2818,9 +2827,8 @@ theorem WordINDCCA2.wordINDCCA2Multi
   INDCCA2On.indcca2MultiOn computableInPolyTime_wordValid
     hkeyGen hencrypt hdecrypt h
 
-/-- **Equivalence of word 1CCA and word batch-challenge multi-challenge CCA security**
-(batch-challenge specialization of [BonehShoup2023], Theorem 12.1 together with
-Definition 12.2). -/
+/-- Batch-challenge step toward [BonehShoup2023], Theorem 12.1 with Definition 12.2, not the
+cited result: word 1CCA and word batch-challenge multi-challenge CCA security are equivalent. -/
 theorem wordINDCCA2Multi_iff_wordINDCCA2
     {keyGen : ℕ → ProbComp (List Bool × List Bool)}
     {encrypt : ℕ → List Bool → List Bool → ProbComp (List Bool)}
