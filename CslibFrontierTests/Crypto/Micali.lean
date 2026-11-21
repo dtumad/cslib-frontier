@@ -59,6 +59,36 @@ example (σ : ℕ) :
   merkleVerifyProg_merklePathProg _
     (fun _ _ ha => BitString.length_of_mem_support_uniformList ha) leaves (by decide)
 
+-- The verifier hashes the final parent as well as the selected leaf. Cached leaf answers alone
+-- do not settle a depth-one verification, even when its return bit is already determined.
+example : OracleComp.interpret (fun q : List Bool =>
+    if q.length = 1 then some (pHash q) else none)
+    (merkleVerifyProg 1 (merkleRoot (fun _ => pHash) [] leaves) 0 [true] [pHash [false]]) =
+      none := by decide +kernel
+
+-- With an empty authentication path, verification still needs the leaf hash.
+example : OracleComp.interpret (fun _ : List Bool => none) (merkleVerifyProg 0 [] 0 [] []) =
+    none := rfl
+
+-- Sampling an honest two-leaf opening and verifying it gives the joint distribution of
+-- acceptance and the very same cache sampled during opening.
+example (σ : ℕ) :
+    let opening : OracleComp MerkleHashSpec _ := do
+      let root ← merkleRootProg leaves
+      let path ← merklePathProg leaves 1
+      return (root, path)
+    let answer := RandomOracle.answer fun _ : List Bool => BitString.uniformList σ
+    let opened := OracleComp.runWith answer opening (fun _ => none)
+    opened.bind (fun ((root, path), cache) =>
+      OracleComp.runWith answer (merkleVerifyProg 1 root 1 [false] path) cache) =
+        opened.map (fun result => (true, result.2)) := by
+  dsimp only
+  apply Probability.PMF.bind_congr_on_support
+  rintro ⟨⟨root, path⟩, cache⟩ hopen
+  exact runWith_merkleVerifyProg_of_mem_support_opening _
+    (fun _ _ ha => BitString.length_of_mem_support_uniformList ha) leaves (by decide)
+    hopen cache (fun _ _ h => h)
+
 -- Flipping the leaf bit, giving a path of the wrong length, using an out-of-range index, or giving
 -- a label that is not a sixteen-bit digest is rejected by `merkleVerifyProg`.
 example : OracleComp.evalPure pHash (do

@@ -10,6 +10,8 @@ module
 public import CslibFrontier.Crypto.Computational.MerkleTree.ROMExtract
 public import CslibFrontier.Languages.Probabilistic.RandomOracle.Invariant
 import CslibFrontier.Tactic.SuppCases
+import Mathlib.Data.List.Forall2
+import Mathlib.Data.List.GetD
 
 /-!
 # Merkle trees as oracle programs
@@ -46,6 +48,8 @@ path in the final trace, as straight-line extraction
 * `Cslib.Crypto.evalPure_merkleVerifyProg_merklePathProg`,
   `Cslib.Crypto.merkleVerifyProg_merklePathProg`: opening completeness under deterministic and
   lazy random oracles.
+* `Cslib.Crypto.runWith_merkleVerifyProg_of_mem_support_opening`: honest verification preserves
+  the cache left by the opening, including when it has since been extended.
 * `Cslib.Crypto.isQueryBounded_merkleVerifyProg`: the query bound of a verification.
 * `Cslib.Crypto.mem_support_run_memoize_invariant`: the trace invariant of memoized runs.
 * `Cslib.Crypto.pathQueriedInTrace_of_mem_support_merkleVerifyProg`,
@@ -241,6 +245,144 @@ theorem evalPure_merkleVerifyProg_merklePathProg (h : List Bool → List Bool) {
       let path ← merklePathProg leaves i
       merkleVerifyProg (Nat.clog 2 leaves.length) root i (leaves.getD i []) path) = true := by
   simpa using merkleVerify_merklePath (H := fun _ => h) (k := []) hlen leaves hi
+
+private theorem partial_hashes (cache : RandomOracle.Cache MerkleHashSpec)
+    (n : ℕ) (key : ℕ → List Bool) {level : List (List Bool)}
+    (settled : OracleComp.interpret cache ((List.range n).mapM (fun j =>
+      OracleComp.query (spec := MerkleHashSpec) (key j))) = some level) :
+    level.length = n ∧ ∀ j < n, cache (key j) = some (level.getD j []) := by
+  have evaluate (js : List ℕ) : OracleComp.interpret cache (js.mapM (fun j =>
+      OracleComp.query (spec := MerkleHashSpec) (key j))) = js.mapM (fun j => cache (key j)) := by
+    induction js with
+    | nil => rfl
+    | cons j js ih =>
+      simp only [List.mapM_cons, OracleComp.interpret_bind, OracleComp.interpret_query,
+        OracleComp.interpret_pure, ih]
+  rw [evaluate] at settled
+  have pointwise := List.mapM_eq_some_iff_forall₂.mp settled
+  have len := pointwise.length_eq
+  simp only [List.length_range] at len
+  refine ⟨len.symm, fun j hj => ?_⟩
+  have hj' : j < level.length := len ▸ hj
+  have h := pointwise.get (i := j) (by simpa using hj) hj'
+  rw [List.getD_eq_getElem _ _ hj']
+  change cache (key ((List.range n)[j]'(by simpa using hj))) = some level[j] at h
+  rwa [List.getElem_range] at h
+
+/-- An opening computes every parent layer while recording the siblings. If the current node
+input and path prefix are already known, the same partial table therefore settles every hash
+input through the root. -/
+private theorem partial_root_of_opening (cache : RandomOracle.Cache MerkleHashSpec)
+    (d : ℕ) (level : List (List Bool)) (pos : ℕ) (seen : List (List Bool))
+    (start : List (List Bool) × ℕ) (inputs : List (List Bool))
+    (hlen : level.length = 2 ^ d) (hpos : pos < level.length)
+    (hprefix : OracleComp.interpret cache (seen.foldlM merkleInputsStepProg start) =
+      some (inputs, pos))
+    (hnode : cache (inputs.headD []) = some (level.getD pos []))
+    {endState : List (List Bool) × ℕ × List (List Bool)}
+    (opened : OracleComp.interpret cache (merklePathLoopProg d (level, pos, seen)) =
+      some endState) :
+    ∃ root, OracleComp.interpret cache (do
+      let finished ← endState.2.2.foldlM merkleInputsStepProg start
+      OracleComp.query (spec := MerkleHashSpec) (finished.1.headD [])) = some root := by
+  induction d generalizing level pos seen inputs with
+  | zero =>
+    change some (level, pos, seen) = some endState at opened
+    cases Option.some.inj opened
+    exact ⟨level.getD pos [], by simp only [OracleComp.interpret_bind, hprefix,
+      OracleComp.interpret_query]; exact hnode⟩
+  | succ d ih =>
+    simp only [merklePathLoopProg, merklePathStepProg, OracleComp.interpret_bind,
+      OracleComp.interpret_pure] at opened
+    cases hp : OracleComp.interpret cache (merkleParentsProg level) with
+    | none => simp [hp] at opened
+    | some parents =>
+      simp only [hp] at opened
+      obtain ⟨hparents, hkey⟩ := partial_hashes cache (level.length / 2)
+        (fun j => encPair encBits encBits (level.getD (2 * j) [], level.getD (2 * j + 1) [])) hp
+      have parentLength : parents.length = 2 ^ d := by simp [hparents, hlen, pow_succ]
+      have parentPos : pos / 2 < level.length / 2 := by
+        rw [hlen, pow_succ] at hpos ⊢
+        omega
+      let sib := level.getD (merkleSibling pos) []
+      let next := if pos % 2 = 0 then encPair encBits encBits (level.getD pos [], sib)
+        else encPair encBits encBits (sib, level.getD pos [])
+      have nextKey : next =
+          encPair encBits encBits
+            (level.getD (2 * (pos / 2)) [], level.getD (2 * (pos / 2) + 1) []) := by
+        rcases Nat.mod_two_eq_zero_or_one pos with he | ho
+        · have hpair : 2 * (pos / 2) = pos := by omega
+          simp [next, sib, merkleSibling, he, hpair]
+        · have hpair : 2 * (pos / 2) = pos - 1 := by omega
+          have hpair' : 2 * (pos / 2) + 1 = pos := by omega
+          simp only [next, sib, merkleSibling, ho, reduceCtorEq, ite_false]
+          rw [hpair', hpair]
+      apply ih parents (pos / 2) (seen ++ [sib]) (next :: inputs) parentLength
+        (by rwa [hparents]) _ _ opened
+      · simp [List.foldlM_append, hprefix, merkleInputsStepProg, hnode, next]
+      · exact nextKey ▸ hkey _ parentPos
+
+/-- After an honest root and opening have been generated from a shared initially empty random
+oracle, verification accepts without adding a single assignment. Extending that post-opening
+cache by unrelated answers still gives the identical verification and preserves the entire
+larger cache. The verifier still issues the hash requests along its path. -/
+theorem runWith_merkleVerifyProg_of_mem_support_opening {ℓ : ℕ}
+    (dist : (q : List Bool) → PMF (MerkleHashSpec q))
+    (hdist : ∀ q, ∀ a ∈ (dist q).support, a.length = ℓ)
+    (leaves : List (List Bool)) {i : ℕ} (hi : i < 2 ^ Nat.clog 2 leaves.length)
+    {root : List Bool} {path : List (List Bool)} {cache : RandomOracle.Cache MerkleHashSpec}
+    (opening : ((root, path), cache) ∈ (OracleComp.runWith (RandomOracle.answer dist) (do
+      let rt ← merkleRootProg leaves
+      let p ← merklePathProg leaves i
+      return (rt, p)) (fun _ => none)).support)
+    (live : RandomOracle.Cache MerkleHashSpec)
+    (extend : ∀ q v, cache q = some v → live q = some v) :
+    OracleComp.runWith (RandomOracle.answer dist)
+      (merkleVerifyProg (Nat.clog 2 leaves.length) root i (leaves.getD i []) path) live =
+        PMF.pure (true, live) := by
+  obtain ⟨_, fresh, settled⟩ :=
+    OracleComp.interpret_finalCache_of_mem_support_runWith_answer dist _ opening
+  let h := OracleComp.cacheOracle dist cache
+  have agree : ∀ q v, cache q = some v → h q = v :=
+    fun _ _ => OracleComp.cacheOracle_eq_of_eq_some dist cache
+  have hw : ∀ q, (h q).length = ℓ :=
+    fun q => hdist _ _ (OracleComp.cacheOracle_mem_support dist (fun k v => fresh k v rfl) q)
+  simp only [OracleComp.interpret_bind, OracleComp.interpret_pure] at settled
+  obtain ⟨rt, hrt, p, hp, hpair⟩ : ∃ rt,
+      OracleComp.interpret cache (merkleRootProg leaves) = some rt ∧
+      ∃ p, OracleComp.interpret cache (merklePathProg leaves i) = some p ∧
+      (rt, p) = (root, path) := by simpa [Option.bind_eq_some_iff] using settled
+  cases hpair
+  have trueResult := evalPure_merkleVerifyProg_merklePathProg h hw leaves hi
+  have hrt' : OracleComp.evalPure h (merkleRootProg leaves) = root :=
+    OracleComp.interpret_eq_pure_of_interpret_some (m := Id) cache h agree _ hrt
+  have hp' : OracleComp.evalPure h (merklePathProg leaves i) = path :=
+    OracleComp.interpret_eq_pure_of_interpret_some (m := Id) cache h agree _ hp
+  simp only [OracleComp.evalPure_bind, hrt', hp'] at trueResult
+  simp only [merklePathProg, OracleComp.interpret_bind, OracleComp.interpret_pure] at hp
+  obtain ⟨level, hl, endState, hloop, hpath⟩ : ∃ level,
+      OracleComp.interpret cache (merkleLeafLevelProg leaves) = some level ∧
+      ∃ (last : List (List Bool) × ℕ × List (List Bool)),
+        OracleComp.interpret cache (merklePathLoopProg (Nat.clog 2 leaves.length) (level, i, [])) =
+          some last ∧ last.2.2 = path := by simpa [Option.bind_eq_some_iff] using hp
+  obtain ⟨hlen, hkeys⟩ := partial_hashes cache _ (fun j => leaves.getD j []) hl
+  obtain ⟨cand, hroot⟩ := partial_root_of_opening cache _ level i [] ([leaves.getD i []], i)
+    [leaves.getD i []] hlen (by rwa [hlen]) rfl (hkeys i hi) hloop
+  rw [hpath] at hroot
+  let verdict := merkleVerifyProg (Nat.clog 2 leaves.length) root i (leaves.getD i []) path
+  have hcandidate : OracleComp.interpret cache (merkleRootOfPathProg (leaves.getD i []) i path) =
+      some cand := by
+    simpa only [merkleRootOfPathProg, merkleInputsProg, bind_assoc, pure_bind] using hroot
+  have settledVerdict : ∃ ok, OracleComp.interpret cache verdict = some ok := by
+    simp only [verdict, merkleVerifyProg, OracleComp.interpret_bind, hcandidate]
+    exact ⟨_, rfl⟩
+  obtain ⟨ok, hok⟩ := settledVerdict
+  have hok' : OracleComp.evalPure h verdict = ok :=
+    OracleComp.interpret_eq_pure_of_interpret_some (m := Id) cache h agree _ hok
+  rw [← hok', trueResult] at hok
+  rw [OracleComp.runWith_eq_run_interpret]
+  exact OracleComp.run_interpret_eq_pure_of_interpret_some cache (RandomOracle.answer dist) live
+    (fun q v hv => RandomOracle.answer_of_some dist live q v (extend q v hv)) verdict hok
 
 /-- **Completeness of `merkleVerifyProg` against `merklePathProg` (lazy random-oracle form)**:
 under a shared lazy random oracle `RandomOracle.answer dist` whose answers all have `ℓ` bits,
