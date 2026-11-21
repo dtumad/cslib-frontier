@@ -124,4 +124,15 @@ example :
   funext a
   cases a <;> decide
 
+-- The inverse miss checks the occupied domain {false}; its range is the opposite singleton.
+example :
+    forgetfulWithBad (.inverse false) ([(false, true)], false) =
+      (Probability.PMF.uniformOfFintype Bool).map
+        (fun a => (a, [(a, false), (false, true)], !a)) := by
+  rw [forgetfulWithBad_of_cachedAnswer_eq_none (q := .inverse false)
+    (cache := [(false, true)]) (by decide)]
+  congr 1
+  funext a
+  cases a <;> decide
+
 end OracleObservationTests

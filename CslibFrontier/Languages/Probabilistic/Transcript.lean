@@ -50,7 +50,7 @@ variable {m : Type u → Type v} [Functor m]
 abbrev Transcript (Response : Query → Type u) := List ((q : Query) × Response q)
 
 /-- Observe calls without changing the underlying oracle's replies or private state. -/
-def withTranscript (oracle : (q : Query) → StateT State m (Response q))
+@[expose] def withTranscript (oracle : (q : Query) → StateT State m (Response q))
     (q : Query) : StateT (State × Transcript Response) m (Response q) :=
   withObserver oracle (fun q _ answer _ transcript => ⟨q, answer⟩ :: transcript) q
 
@@ -72,8 +72,9 @@ theorem withTranscript_apply_pmf (oracle : (q : Query) → StateT State PMF (Res
 theorem run_interpret_withTranscript (oracle : (q : Query) → StateT State PMF (Response q))
     (program : OracleComp Response α) (s : State) (transcript : Transcript Response) :
     ((interpret (withTranscript oracle) program).run (s, transcript)).map
-        (fun (result, state) => (result, state.1)) = (interpret oracle program).run s :=
-  run_interpret_withObserver oracle _ program s transcript
+        (fun (result, state) => (result, state.1)) = (interpret oracle program).run s := by
+  unfold withTranscript
+  exact run_interpret_withObserver (m := PMF) oracle _ program s transcript
 
 /-- An existing transcript is an untouched suffix of the newly recorded interaction. -/
 theorem run_interpret_withTranscript_append (oracle : (q : Query) → StateT State PMF (Response q))
@@ -96,8 +97,9 @@ theorem run_interpret_withTranscript_map_state {State' : Type u}
     (program : OracleComp Response α) (s : State) (transcript : Transcript Response) :
     ((interpret (withTranscript oracle) program).run (s, transcript)).map
         (fun (a, s', seen) => (a, represent s', seen)) =
-      (interpret (withTranscript oracle') program).run (represent s, transcript) :=
-  run_interpret_withObserver_map oracle oracle' _ _ represent id step
+      (interpret (withTranscript oracle') program).run (represent s, transcript) := by
+  unfold withTranscript
+  exact run_interpret_withObserver_map (m := PMF) oracle oracle' _ _ represent id step
     (by intros; rfl) program s transcript
 
 end Cslib.OracleComp

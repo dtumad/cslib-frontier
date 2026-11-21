@@ -44,7 +44,7 @@ variable [Functor m]
 
 /-- Run the oracle once, then update a passive observation from the call's two states and reply.
 The observation update is pure and cannot change the reply or the private state. -/
-def withObserver (oracle : (q : Query) → StateT State m (Response q))
+@[expose] def withObserver (oracle : (q : Query) → StateT State m (Response q))
     (update : (q : Query) → State → Response q → State → Obs → Obs)
     (q : Query) : StateT (State × Obs) m (Response q) :=
   fun (s, observation) =>
