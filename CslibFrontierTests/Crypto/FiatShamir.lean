@@ -153,7 +153,8 @@ example :
 example :
     (OracleComp.Checkpoint.seek (fun _ (s : List (ZMod 11)) => (s.headD 0, s.tail)) 2
       ((OracleComp.interpret (ForkingReduction.handler (FiatShamir.signer extendedHashPoint))
-        mixedHashQueries).run ⟨[], [], 0, []⟩) [3, 7, 9]).occurrence? = some (.inr true, 0) := by rfl
+        mixedHashQueries).run ⟨[], [], 0, []⟩) [3, 7, 9]).occurrence? =
+        some (.inr true, 0) := by rfl
 
 -- The checkpoint indexes the backend tape. The fourth adversary query above hits the cache,
 -- so there is no fourth backend query.
