@@ -166,4 +166,16 @@ private def unreachable : DecisionTree Unit Bool :=
 -- The depth-three structural path asks the same bit for inconsistent answers.
 example : unreachable.depth = 3 ∧ ∀ x : Unit → Bool, unreachable.cost x ≤ 2 := by decide
 
+example : OracleComp.IsCostBounded (fun _ => 1) unreachable.toFreeM 3 :=
+  (weightedDepth_le_iff_isCostBounded _ _ _).mp (by decide)
+
+example : ¬ OracleComp.IsCostBounded (fun _ => 1) unreachable.toFreeM 2 := by
+  rw [← weightedDepth_le_iff_isCostBounded]
+  decide
+
+-- Erasing the output allows the same budget criterion for a tree with large leaves.
+example {β : Type 1} (t : DecisionTree Unit β) (w : Unit → ℕ) (n : ℕ) :
+    t.weightedDepth w ≤ n ↔ OracleComp.IsCostBounded w (t.map fun _ => ()).toFreeM n := by
+  rw [← weightedDepth_le_iff_isCostBounded, weightedDepth_map]
+
 end CslibFrontierTests.DecisionTreeComposition
