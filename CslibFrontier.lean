@@ -7657,6 +7657,7 @@ public import CslibFrontier.Languages.Probabilistic.BitString
 public import CslibFrontier.Languages.Probabilistic.BoundedUniform
 public import CslibFrontier.Languages.Probabilistic.CenteredBinomial
 public import CslibFrontier.Languages.Probabilistic.CenteredBinomial.Concentration
+public import CslibFrontier.Languages.Probabilistic.Checkpoint
 public import CslibFrontier.Languages.Probabilistic.Concentration
 public import CslibFrontier.Languages.Probabilistic.Expect
 public import CslibFrontier.Languages.Probabilistic.Forking

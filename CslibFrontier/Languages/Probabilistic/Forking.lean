@@ -7,6 +7,7 @@ Authors: Samuel Schlesinger
 module
 -- upstream: candidate
 
+public import CslibFrontier.Languages.Probabilistic.Checkpoint
 public import CslibFrontier.Languages.Probabilistic.Oracle
 public import CslibFrontier.Languages.Probabilistic.QueryCount
 public import CslibFrontier.Probability.Forking
@@ -56,6 +57,10 @@ this form by drawing its coins in advance. The statements are exact; no efficien
 * `Cslib.OracleComp.le_add_sqrt_fork`: the forking lemma for oracle programs.
 * `Cslib.OracleComp.toReal_le_add_sqrt_fork_of_le`: the same in the form a reduction uses it, for
   an event bounded by the acceptance probability and a fork bounded by the reduction's game.
+* `Cslib.OracleComp.mem_support_fork_checkpoint`: the typed call and exact path shared by
+  both successful fork runs.
+* `Cslib.OracleComp.mem_support_fork_checkpoint`: both runs stop at the same query, with the
+  same typed path and continuation.
 * `Cslib.OracleComp.mem_support_fork`: both runs of a successful fork ask the same queries up to
   the named one, and answer it differently.
 * `Cslib.OracleComp.take_runWithAnswers`: a program's first `n + 1` queries depend only on its
@@ -105,22 +110,78 @@ def runWithAnswers (default : H) : OracleComp (fun _ : Query => H) α → List H
     runWithAnswers default (f <$> OracleComp.query (spec := fun _ : Query => H) q) answers =
       (f (answers.headD default), [q]) := rfl
 
+/-- Plugging the remaining answer tape into a recorded prefix replays the reached residual
+and returns the original chronological query history. -/
+theorem runWithAnswers_prefix (default : H) {p r : OracleComp (fun _ : Query => H) α}
+    (h : Prefix p r) (more : List H) :
+    runWithAnswers default p (h.events.map (fun e => e.2) ++ more) =
+      ((runWithAnswers default r more).1,
+        h.events.map Sigma.fst ++ (runWithAnswers default r more).2) := by
+  induction h with
+  | root => rfl
+  | step a rest ih =>
+    simp only [Prefix.events, List.map_cons, List.cons_append, runWithAnswers,
+      List.headD_cons, List.tail_cons, ih]
+
+/-- Stopping with the first `n` replies retains exactly the requests through position `n`
+of the full run. A short tape uses the same default as `runWithAnswers`. -/
+theorem queries_checkpoint_runWithAnswers (default : H)
+    (program : OracleComp (fun _ : Query => H) α) (answers : List H) (n : ℕ) :
+    (Checkpoint.seek (fun _ (s : List H) => (s.headD default, s.tail))
+      n program answers).queries =
+        (runWithAnswers default program answers).2.take (n + 1) := by
+  induction program generalizing answers n with
+  | pure a => cases n <;> rfl
+  | liftBind q k ih =>
+    cases n with
+    | zero => rfl
+    | succ n =>
+      simp only [Checkpoint.queries_seek_succ, runWithAnswers, List.take_succ_cons, ih]
+
+/-- The global tape position selects a query; its occurrence number counts only earlier
+requests with that same name. Out-of-range positions give no occurrence. -/
+theorem occurrence?_checkpoint_runWithAnswers [DecidableEq Query] (default : H)
+    (p : OracleComp (fun _ : Query => H) α) (xs : List H) (n : ℕ) :
+    (Checkpoint.seek (fun _ (s : List H) => (s.headD default, s.tail)) n p xs).occurrence? =
+      ((runWithAnswers default p xs).2[n]?).map
+        fun q => (q, ((runWithAnswers default p xs).2.take n).count q) := by
+  induction p generalizing xs n with
+  | pure a => cases n <;> rfl
+  | liftBind q k ih =>
+    cases n with
+    | zero => rfl
+    | succ n =>
+      simp only [Checkpoint.seek, Checkpoint.occurrence?_prepend, ih, runWithAnswers,
+        List.getElem?_cons_succ, List.take_succ_cons, List.count_cons, beq_iff_eq, Option.map_map]
+      rfl
+
+/-- Two replays with the same answers before a position reach the same dependent checkpoint,
+including the reply continuation for its focused query. -/
+theorem checkpoint_eq_of_take_eq (default : H) (p : OracleComp (fun _ : Query => H) α)
+    {xs ys : List H} {n : ℕ} (h : xs.take n = ys.take n) :
+    Checkpoint.seek (fun _ (s : List H) => (s.headD default, s.tail)) n p xs =
+      Checkpoint.seek (fun _ (s : List H) => (s.headD default, s.tail)) n p ys := by
+  induction p generalizing xs ys n with
+  | pure => cases n <;> rfl
+  | liftBind q k ih =>
+    cases n with
+    | zero => rfl
+    | succ n =>
+      have hs : xs.headD default = ys.headD default ∧ xs.tail.take n = ys.tail.take n := by
+        cases xs <;> cases ys <;> simp_all
+      simp only [Checkpoint.seek, ih _ hs.2]
+      exact congrArg (fun a => Checkpoint.prepend a
+        (Checkpoint.seek (fun _ (s : List H) => (s.headD default, s.tail)) n (k a) ys.tail)) hs.1
+
+
 /-- A program's first `n + 1` queries depend only on the first `n` answers. -/
 theorem take_runWithAnswers (default : H) (program : OracleComp (fun _ : Query => H) α) :
     ∀ {answers answers' : List H} {n : ℕ}, answers.take n = answers'.take n →
       (runWithAnswers default program answers).2.take (n + 1) =
         (runWithAnswers default program answers').2.take (n + 1) := by
-  induction program with
-  | pure a => intros; rfl
-  | liftBind q cont ih =>
-    intro answers answers' n h
-    cases n with
-    | zero => rfl
-    | succ n =>
-      have hsplit : answers.headD default = answers'.headD default ∧
-          answers.tail.take n = answers'.tail.take n := by
-        cases answers <;> cases answers' <;> simp_all
-      simp only [runWithAnswers, List.take_succ_cons, hsplit.1, ih _ hsplit.2]
+  intro answers answers' n h
+  rw [← queries_checkpoint_runWithAnswers, ← queries_checkpoint_runWithAnswers,
+    checkpoint_eq_of_take_eq default program h]
 
 /-- Running a sequenced program on a list of answers runs the first part on the list and the
 second part on the answers the first part left unused. -/
@@ -408,6 +469,46 @@ theorem toReal_le_add_sqrt_fork_of_le (first : PMF S)
     (Nat.cast_nonneg q))
   linarith
 
+/-- Both tapes of a successful fork stop at the very same call before answering position `j`.
+The path records every earlier reply and the continuation accepts either of the two distinct
+fork answers. -/
+theorem mem_support_fork_checkpoint {first : PMF S}
+    {program : S → OracleComp (fun _ : Query => H) (Option ℕ × β)} {default : H} {q : ℕ}
+    {j : Fin q} {out out' : (Option ℕ × β) × List Query}
+    (hfork : some (j, out, out') ∈
+      (Forking.fork first (forkingAlgorithm default q program)).support) :
+    ∃ s ∈ first.support, ∃ h h' : Fin q → H, (∀ i < j, h i = h' i) ∧ h j ≠ h' j ∧
+      out = runWithAnswers default (program s) (List.ofFn h) ∧
+      out' = runWithAnswers default (program s) (List.ofFn h') ∧
+      forkNamedPosition out = some j.val ∧ forkNamedPosition out' = some j.val ∧
+      ∃ query resume, ∃ path : Prefix (program s) (.liftBind query resume),
+        let stop := Checkpoint.seek (fun _ (xs : List H) => (xs.headD default, xs.tail))
+          j.val (program s)
+        stop (List.ofFn h) = .call query resume path ∧
+          stop (List.ofFn h') = .call query resume path := by
+  classical
+  obtain ⟨s, hs, h, h', hagree, hne, hrun, hrun'⟩ := Forking.mem_support_fork hfork
+  simp only [forkingAlgorithm, Prod.mk.injEq] at hrun hrun'
+  obtain ⟨hidx, rfl⟩ := hrun
+  obtain ⟨hidx', rfl⟩ := hrun'
+  obtain ⟨hpos, hlt⟩ := validIndex_eq_some hidx
+  have common : (List.ofFn h).take j = (List.ofFn h').take j := by
+    refine List.ext_getElem (by simp) fun i hi _ => ?_
+    simp only [List.length_take, List.length_ofFn] at hi
+    simp only [List.getElem_take, List.getElem_ofFn]
+    exact hagree ⟨i, by omega⟩ (Fin.mk_lt_of_lt_val (by omega))
+  have shared := checkpoint_eq_of_take_eq default (program s) common
+  have occ := occurrence?_checkpoint_runWithAnswers default (program s) (List.ofFn h) j
+  rw [List.getElem?_eq_getElem hlt] at occ
+  cases hc : Checkpoint.seek (fun _ (xs : List H) => (xs.headD default, xs.tail))
+      j.val (program s) (List.ofFn h) with
+  | done a path =>
+    rw [hc] at occ
+    contradiction
+  | call query resume path =>
+    exact ⟨s, hs, h, h', hagree, hne, rfl, rfl, hpos, (validIndex_eq_some hidx').1,
+      query, resume, path, hc, shared.symm.trans hc⟩
+
 /-- A successful fork of a program reruns it on the same coins with answers that agree before the
 named position `j` and differ at it. Both runs name `j`, ask the same first `j + 1` queries, and
 have actually asked a query at position `j`, the same one. -/
@@ -422,23 +523,20 @@ theorem mem_support_fork {first : PMF S}
       forkNamedPosition out = some j.val ∧ forkNamedPosition out' = some j.val ∧
       out.2.take (j + 1) = out'.2.take (j + 1) ∧
       ∃ query, out.2[j.val]? = some query ∧ out'.2[j.val]? = some query := by
-  obtain ⟨s, hs, h, h', hagree, hne, hrun, hrun'⟩ := Forking.mem_support_fork hfork
-  simp only [forkingAlgorithm, Prod.mk.injEq] at hrun hrun'
-  obtain ⟨hidx, rfl⟩ := hrun
-  obtain ⟨hidx', rfl⟩ := hrun'
-  obtain ⟨hpos, hlt⟩ := validIndex_eq_some hidx
-  obtain ⟨hpos', hlt'⟩ := validIndex_eq_some hidx'
-  have htake : (runWithAnswers default (program s) (List.ofFn h)).2.take (j + 1) =
-      (runWithAnswers default (program s) (List.ofFn h')).2.take (j + 1) := by
-    refine take_runWithAnswers default (program s) ?_
-    refine List.ext_getElem (by simp) fun i hi _ => ?_
-    simp only [List.length_take, List.length_ofFn] at hi
-    simp only [List.getElem_take, List.getElem_ofFn]
-    exact hagree ⟨i, by omega⟩ (Fin.mk_lt_of_lt_val (by omega))
-  refine ⟨s, hs, h, h', hagree, hne, rfl, rfl, hpos, hpos', htake,
-    (runWithAnswers default (program s) (List.ofFn h)).2[j.val], List.getElem?_eq_getElem hlt, ?_⟩
-  have hget := congrArg (fun l : List Query => l[j.val]?) htake
-  simp only [List.getElem?_take, Nat.lt_succ_self, ite_true] at hget
-  rw [← hget, List.getElem?_eq_getElem hlt]
+  classical
+  obtain ⟨s, hs, h, h', hagree, hne, rfl, rfl, hpos, hpos', query, resume, path, hc, hc'⟩ :=
+    mem_support_fork_checkpoint hfork
+  have traces := congrArg Checkpoint.queries (hc.trans hc'.symm)
+  simp only [queries_checkpoint_runWithAnswers] at traces
+  have atFocus (tape : List H) (focused : Checkpoint.seek
+      (fun _ (xs : List H) => (xs.headD default, xs.tail)) j.val (program s) tape =
+        .call query resume path) : (runWithAnswers default (program s) tape).2[j.val]? =
+      some query := by
+    have occ := occurrence?_checkpoint_runWithAnswers default (program s) tape j
+    rw [focused] at occ
+    simpa [Checkpoint.occurrence?, Function.comp_def] using
+      (congrArg (Option.map Prod.fst) occ).symm
+  exact ⟨s, hs, h, h', hagree, hne, rfl, rfl, hpos, hpos', traces, query,
+    atFocus _ hc, atFocus _ hc'⟩
 
 end Cslib.OracleComp

@@ -91,4 +91,29 @@ example : (Forking.fork (PMF.pure ()) (OracleComp.forkingAlgorithm false 1
   simp [Forking.fork, Forking.onTapes,
     OracleComp.forkingAlgorithm, OracleComp.validIndex, nameWithoutAsking]
 
+-- The first answer selects a request with a different reply type. Position two is
+-- the second occurrence of the Boolean request. An early negative answer finishes the run.
+private abbrev replies : Bool → Type
+  | false => Bool
+  | true => ℕ
+
+private def adaptive : OracleComp replies ℕ :=
+  .liftBind false fun (b : Bool) => if b then
+    .liftBind true fun (n : ℕ) => .liftBind false fun (keep : Bool) => pure (if keep then n else 0)
+  else pure 17
+
+private def answer (enable : Bool) : (q : Bool) → Unit → replies q × Unit
+  | false, _ => (enable, ())
+  | true, _ => ((3 : ℕ), ())
+
+example : (OracleComp.Checkpoint.seek (answer true) 2 adaptive ()).occurrence? =
+    some (false, 1) := rfl
+
+example : (OracleComp.Checkpoint.seek (answer false) 2 adaptive ()).occurrence? = none := rfl
+
+-- An exhausted list uses the supplied default to decide the next request.
+example : (OracleComp.Checkpoint.seek (fun _ (s : List Bool) => (s.headD false, s.tail))
+    1 (OracleComp.query (spec := fun _ : Bool => Bool) true >>= fun b => OracleComp.query b)
+    []).occurrence? = some (false, 0) := rfl
+
 end CslibFrontierTests.Crypto.Forking
