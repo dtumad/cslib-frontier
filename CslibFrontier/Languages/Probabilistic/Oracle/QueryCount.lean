@@ -163,7 +163,7 @@ theorem transcript_cost_le {cost : Query → ℕ} {program : ProbOracleComp spec
       supp_cases hfirst [sumHandler, StateT.run_lift] with ⟨_, -, rfl, rfl, rfl⟩
       simpa using ih _ hrest
     | inr q =>
-      supp_cases hfirst [sumHandler, StateT.run, withTranscript]
+      supp_cases hfirst [sumHandler, StateT.run, withTranscript_apply_pmf]
         with ⟨⟨answer, next⟩, -, rfl, rfl, rfl⟩
       change _ ∈ (runWith _ _ _).support at hrest
       rw [run_interpret_withTranscript_append] at hrest
@@ -217,13 +217,13 @@ theorem isCostBounded_of_transcript_cost_le [hne : ∀ q, Nonempty (spec q)] {co
           | some state => (oracle q' state).map fun (b, state') => (b, some state')
         have hlift := runWith_map_state (withTranscript oracle) (withTranscript oracle')
           (fun state => (some state.1, state.2)) (fun q' state => by
-            simp [withTranscript, oracle', PMF.map_comp, Function.comp_def]) (cont a) (s, [])
+            simp [oracle', PMF.map_comp, Function.comp_def]) (cont a) (s, [])
         have hwhole := h (Option State) oracle' none (some s') result
           (transcript ++ [⟨q, a⟩]) (by
             rw [hrun, PMF.mem_support_bind_iff]
             refine ⟨(a, some s, [⟨q, a⟩]), ?_, ?_⟩
             · change (a, some s, [⟨q, a⟩]) ∈ ((withTranscript oracle' q) (none, [])).support
-              simp only [withTranscript, PMF.mem_support_map_iff]
+              simp only [withTranscript_apply_pmf, PMF.mem_support_map_iff]
               exact ⟨(a, some s), by simp [oracle', first], rfl⟩
             · rw [run_interpret_withTranscript_append, PMF.mem_support_map_iff]
               refine ⟨(result, some s', transcript), ?_, rfl⟩

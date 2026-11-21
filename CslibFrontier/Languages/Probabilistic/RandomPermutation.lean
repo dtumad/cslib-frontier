@@ -11,6 +11,7 @@ public import CslibFrontier.Languages.Probabilistic.RandomOracle
 public import CslibFrontier.Languages.Probabilistic.UntilBad
 public import Mathlib.Data.Fintype.Perm
 import CslibFrontier.Languages.Probabilistic.Norm
+import CslibFrontier.Languages.Probabilistic.Observation
 import CslibFrontier.Languages.Probabilistic.Oracle.InterpNorm
 import CslibFrontier.Languages.Probabilistic.UntilBad.ChooseTwo
 import CslibFrontier.Probability.PMF.Event
@@ -606,7 +607,8 @@ private theorem bidirDedupStep_transcript_inv {β σ : Type}
       supp_cases hmem [pmf_norm, OracleComp.interpret_bind, OracleComp.interpret_query,
         OracleComp.interpret_pure, StateT.run_bind, StateT.run_pure] with
         ⟨⟨a, s₁, tr₁⟩, hfirst, hrest⟩
-      supp_cases hfirst [StateT.run, OracleComp.withTranscript] with ⟨⟨a', _⟩, -, rfl, rfl, rfl⟩
+      supp_cases hfirst [StateT.run, OracleComp.withTranscript_apply_pmf]
+        with ⟨⟨a', _⟩, -, rfl, rfl, rfl⟩
       rw [OracleComp.run_interpret_withTranscript_append] at hrest
       supp_cases hrest with ⟨⟨⟨_, _⟩, _, fresh⟩, hfresh, ⟨rfl, rfl⟩, rfl, rfl⟩
       obtain ⟨hceq, hnodup, hmiss⟩ := ih a' hfresh
@@ -1235,13 +1237,24 @@ theorem run_interpret_forgetfulAnswer_liftForward {β : Type}
 /-- Forgetful lazy handler instrumented with a `bad` flag that records whether a fresh draw fell
 outside `freshAnswers`: a forward draw collided with `ran(cache)` or an inverse draw collided with
 `dom(cache)`. -/
-noncomputable def forgetfulWithBad (q : PermQuery α) :
-    StateT (Cache α × Bool) PMF α := fun (cache, bad) =>
-  match cachedAnswer cache q with
-  | some a => PMF.pure (a, (cache, bad))
-  | none =>
-    (PMF.uniformOfFintype α).map fun a =>
-      (a, (PermQuery.toCacheEntry ⟨q, a⟩ :: cache, bad || decide (a ∉ freshAnswers cache q)))
+noncomputable def forgetfulWithBad : (q : PermQuery α) → StateT (Cache α × Bool) PMF α :=
+  OracleComp.withObserver forgetfulAnswer fun q cache a _ bad =>
+    if (cachedAnswer cache q).isSome then bad else bad || decide (a ∉ freshAnswers cache q)
+
+/-- A cache hit preserves the cache and the collision flag. -/
+theorem forgetfulWithBad_of_cachedAnswer_eq_some {q : PermQuery α} {cache : Cache α} {a : α}
+    (h : cachedAnswer cache q = some a) (bad : Bool) :
+    forgetfulWithBad q (cache, bad) = PMF.pure (a, cache, bad) := by
+  simp [forgetfulWithBad, OracleComp.withObserver_apply, PMF.monad_map_eq_map,
+    forgetfulAnswer_of_cachedAnswer_eq_some h, h, PMF.pure_map]
+
+/-- A miss records whether the sampled answer collides with the pre-call cache. -/
+theorem forgetfulWithBad_of_cachedAnswer_eq_none {q : PermQuery α} {cache : Cache α}
+    (h : cachedAnswer cache q = none) (bad : Bool) :
+    forgetfulWithBad q (cache, bad) = (PMF.uniformOfFintype α).map fun a =>
+      (a, PermQuery.toCacheEntry ⟨q, a⟩ :: cache, bad || decide (a ∉ freshAnswers cache q)) := by
+  simp [forgetfulWithBad, OracleComp.withObserver_apply, PMF.monad_map_eq_map,
+    forgetfulAnswer_of_cachedAnswer_eq_none h, h, PMF.map_comp, Function.comp_def]
 
 /-- Coupled exact lazy handler with a `bad` flag: draw a candidate uniformly from `α`; if it lies in
 `freshAnswers` (`unusedRange` for a forward query, `unusedDomain` for an inverse one), use it
@@ -1258,21 +1271,15 @@ noncomputable def exactWithBad (q : PermQuery α) :
       (answer q cache).map fun (a, cache') => (a, (cache', true))
 
 theorem forgetfulWithBad_map_fst (q : PermQuery α) (st : Cache α × Bool) :
-    (forgetfulWithBad q st).map (fun (a, st') => (a, st'.1)) = forgetfulAnswer q st.1 := by
-  rcases st with ⟨cache, bad⟩
-  cases h : cachedAnswer cache q with
-  | some a => simp [forgetfulWithBad, forgetfulAnswer_of_cachedAnswer_eq_some h, h, PMF.pure_map]
-  | none =>
-    simp [forgetfulWithBad, forgetfulAnswer_of_cachedAnswer_eq_none h, h, PMF.map_comp,
-      Function.comp_def]
+    (forgetfulWithBad q st).map (fun (a, st') => (a, st'.1)) = forgetfulAnswer q st.1 :=
+  OracleComp.map_fst_withObserver (m := PMF) forgetfulAnswer _ q st
 
 private theorem run_interpret_forgetfulWithBad_map_fst {β : Type}
     (program : OracleComp (PermOracleSpec α) β) (cache : Cache α) (bad : Bool) :
     ((OracleComp.interpret forgetfulWithBad program).run (cache, bad)).map
       (fun (a, st') => (a, st'.1)) =
     (OracleComp.interpret forgetfulAnswer program).run cache :=
-  OracleComp.run_interpret_map_state forgetfulWithBad forgetfulAnswer Prod.fst
-    forgetfulWithBad_map_fst program (cache, bad)
+  OracleComp.run_interpret_withObserver (m := PMF) forgetfulAnswer _ program cache bad
 
 /-- A supported `forgetfulWithBad` step either answers from `c` without modifying `(c, b)`, or
 misses, prepends the fresh answer entry, and updates `b` with whether `a ∉ freshAnswers c q`. -/
@@ -1281,9 +1288,13 @@ theorem mem_support_forgetfulWithBad {q : PermQuery α} {c c' : Cache α}
     (cachedAnswer c q = some a ∧ c' = c ∧ b' = b) ∨
       (cachedAnswer c q = none ∧ c' = PermQuery.toCacheEntry ⟨q, a⟩ :: c ∧
         b' = (b || decide (a ∉ freshAnswers c q))) := by
-  cases hq : cachedAnswer c q <;> supp_cases h [forgetfulWithBad, hq]
-  · exact Or.inr ⟨rfl, rfl, rfl⟩
-  · exact Or.inl ⟨rfl, rfl, rfl⟩
+  cases hq : cachedAnswer c q with
+  | none =>
+    supp_cases h [forgetfulWithBad_of_cachedAnswer_eq_none hq]
+    exact Or.inr ⟨rfl, rfl, rfl⟩
+  | some v =>
+    supp_cases h [forgetfulWithBad_of_cachedAnswer_eq_some hq]
+    exact Or.inl ⟨rfl, rfl, rfl⟩
 
 /-- A supported `exactWithBad` step either answers from `c` without modifying `(c, b)`, draws a
 fresh answer in `freshAnswers c q` and prepends it while keeping `b`, or resamples via `answer`
@@ -1354,9 +1365,10 @@ theorem identicalUntilBad_exactWithBad_forgetfulWithBad :
     have hbad' : bad' = false := Bool.eq_false_iff.mpr hst'
     subst hbad hbad'
     cases hq : cachedAnswer cache q with
-    | some b => simp only [exactWithBad, forgetfulWithBad, hq]
+    | some b => simp only [exactWithBad, forgetfulWithBad_of_cachedAnswer_eq_some hq, hq]
     | none =>
-      simp only [exactWithBad, forgetfulWithBad, hq, Probability.PMF.monad_bind_eq_bind]
+      simp only [exactWithBad, forgetfulWithBad_of_cachedAnswer_eq_none hq, hq,
+        Probability.PMF.monad_bind_eq_bind]
       rw [PMF.bind_apply, PMF.map_apply]
       refine tsum_congr fun a₀ => ?_
       by_cases ha₀ : a₀ ∈ freshAnswers cache q
@@ -1398,7 +1410,7 @@ theorem toOuterMeasure_bad_forgetfulWithBad_le {β : Type}
     have hb' : b = false := Bool.eq_false_iff.mpr hb
     subst hb'
     cases hq : cachedAnswer c q with
-    | some a => simp [forgetfulWithBad, hq, PMF.toOuterMeasure_pure_apply]
+    | some a => simp [forgetfulWithBad_of_cachedAnswer_eq_some hq, PMF.toOuterMeasure_pure_apply]
     | none =>
       have hpre : (fun a : α => (a, (PermQuery.toCacheEntry ⟨q, a⟩ :: c,
           false || decide (a ∉ freshAnswers c q))))
@@ -1415,7 +1427,7 @@ theorem toOuterMeasure_bad_forgetfulWithBad_le {β : Type}
         | inverse y =>
           simpa [freshAnswers, Option.ne_none_iff_isSome] using
             RandomOracle.card_filter_lookup_isSome_le c
-      simp only [forgetfulWithBad, hq]
+      simp only [forgetfulWithBad_of_cachedAnswer_eq_none hq]
       rw [PMF.toOuterMeasure_map_apply, hpre, PMF.toOuterMeasure_uniformOfFintype]
       gcongr
       exact Nat.cast_le.mpr hcard

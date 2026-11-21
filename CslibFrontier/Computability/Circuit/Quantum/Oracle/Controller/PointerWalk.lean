@@ -185,7 +185,7 @@ private theorem transcript_cost_phase {State : Type} (cost : Operation → ℕ)
         2 * cost (.inl .gate) + cost (.inl .query) := by
   supp_cases h [phase, gate, command, ProbOracleComp.runWith_bind,
     ProbOracleComp.runWith_map, ProbOracleComp.runWith_query,
-    ProbOracleComp.runWith_pure, OracleComp.withTranscript]
+    ProbOracleComp.runWith_pure, OracleComp.withTranscript_apply_pmf]
   simp only [Prod.map_snd, id_eq, List.map_cons, List.sum_cons]
   omega
 
@@ -204,7 +204,7 @@ private theorem transcript_cost_round {State : Type} (cost : Operation → ℕ)
   obtain ⟨⟨next, middle, seen⟩, hnext, hphase⟩ := h
   have hcost := transcript_cost_phase cost oracle next hphase
   supp_cases hnext [requestBit, ProbOracleComp.runWith_map,
-    ProbOracleComp.runWith_query, OracleComp.withTranscript]
+    ProbOracleComp.runWith_query, OracleComp.withTranscript_apply_pmf]
   simp only [List.map_cons, List.sum_cons] at hcost
   dsimp only [Prod.map, id] at hcost ⊢
   omega
@@ -244,7 +244,7 @@ private theorem transcript_cost_prepare {State : Type} (cost : Operation → ℕ
         3 * cost (.inl .gate) := by
   supp_cases h [prepare, gate, command, ProbOracleComp.runWith_bind,
     ProbOracleComp.runWith_map, ProbOracleComp.runWith_query,
-    ProbOracleComp.runWith_pure, OracleComp.withTranscript]
+    ProbOracleComp.runWith_pure, OracleComp.withTranscript_apply_pmf]
   simp only [Prod.map_snd, id_eq, List.map_cons, List.sum_cons]
   omega
 
@@ -269,7 +269,7 @@ theorem transcript_cost_program {State : Type} (cost : Operation → ℕ)
   have hfirst := transcript_cost_prepare cost oracle hprepare
   have hsecond := transcript_cost_walk cost oracle count hwalk
   supp_cases h [gate, command, requestBit, ProbOracleComp.runWith_bind,
-    ProbOracleComp.runWith_map, ProbOracleComp.runWith_query, OracleComp.withTranscript]
+    ProbOracleComp.runWith_map, ProbOracleComp.runWith_query, OracleComp.withTranscript_apply_pmf]
   simp only [List.map_nil, List.sum_nil, Nat.zero_add] at hfirst
   simp only [Prod.map_snd, id_eq, List.map_cons, List.sum_cons]
   rw [hsecond, hfirst]

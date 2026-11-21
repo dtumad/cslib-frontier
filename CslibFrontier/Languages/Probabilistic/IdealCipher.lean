@@ -294,7 +294,9 @@ theorem toOuterMeasure_bad_forgetfulWithBad_le {β : Type}
     subst hb'
     simp only [forgetfulWithBad, PMF.toOuterMeasure_map_apply, Set.preimage_ofPred_eq]
     cases hq : cachedAnswer (c q.1) q.2 with
-    | some a => simp [RandomPermutation.forgetfulWithBad, hq, PMF.toOuterMeasure_pure_apply]
+    | some a =>
+      simp [RandomPermutation.forgetfulWithBad_of_cachedAnswer_eq_some hq,
+        PMF.toOuterMeasure_pure_apply]
     | none =>
       have hpre : (fun a : Block => (a, (PermQuery.toCacheEntry ⟨q.2, a⟩ :: c q.1,
           false || decide (a ∉ freshAnswers (c q.1) q.2)))) ⁻¹'
@@ -311,7 +313,7 @@ theorem toOuterMeasure_bad_forgetfulWithBad_le {β : Type}
         | inverse y =>
           simpa [freshAnswers, Option.ne_none_iff_isSome] using
             Cslib.RandomOracle.card_filter_lookup_isSome_le (c q.1)
-      simp only [RandomPermutation.forgetfulWithBad, hq]
+      simp only [RandomPermutation.forgetfulWithBad_of_cachedAnswer_eq_none hq]
       rw [PMF.toOuterMeasure_map_apply, hpre, PMF.toOuterMeasure_uniformOfFintype]
       gcongr
       exact (Nat.cast_le.mpr hcard).trans (Nat.cast_le.mpr (Finset.single_le_sum

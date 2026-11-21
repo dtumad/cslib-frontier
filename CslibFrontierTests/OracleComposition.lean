@@ -115,7 +115,7 @@ example : ¬ IsOraclePPTOn encUnary encBits (fun n => List.take 1 <$>
     (s := ()) (s' := ()) (result := [])
     (transcript := [⟨((), List.replicate (2 ^ n) true), []⟩]) (by
       rw [ProbOracleComp.runWith_map, ProbOracleComp.runWith_query]
-      simp [OracleComp.withTranscript]) _ List.mem_cons_self
+      simp) _ List.mem_cons_self
   simp only [List.length_replicate, encUnary_apply] at hcall
   lia
 

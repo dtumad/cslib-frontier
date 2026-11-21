@@ -32,6 +32,7 @@ There is one oracle specification and one interpreter; stateful execution uses `
   interpretation of `pure`, `>>=`, `<$>`, and `query`.
 * `Cslib.OracleComp.run_interpret_invariant`: invariants of each call hold after execution.
 * `Cslib.OracleComp.run_interpret_simulation_of_invariant`: probabilistic state simulation.
+* `Cslib.OracleComp.map_state_run_interpret`: deterministic state transport in any lawful monad.
 * `Cslib.OracleComp.run_interpret_map_state_of_invariant`: deterministic state representation.
 * `Cslib.OracleComp.run_interpret_map_response_state`: represent both replies and private state.
 * `Cslib.OracleComp.map_run_interpret`: a monad morphism commutes with stateful interpretation.
@@ -192,6 +193,22 @@ theorem run_interpret_map_state_of_invariant
       program s hs
 
 /-- A deterministic representation commuting with each call preserves the complete execution. -/
+theorem map_state_run_interpret
+    {m : Type v → Type*} [Monad m] [LawfulMonad m]
+    (oracle : (q : ι) → StateT State m (spec q))
+    (oracle' : (q : ι) → StateT State' m (spec q)) (represent : State → State')
+    (step : ∀ q s, (fun (a, s') => (a, represent s')) <$> oracle q s =
+      oracle' q (represent s)) (program : OracleComp spec α) (s : State) :
+    (fun (a, s') => (a, represent s')) <$> (interpret oracle program).run s =
+      (interpret oracle' program).run (represent s) := by
+  induction program using OracleComp.induction generalizing s with
+  | pure a => simp
+  | query_bind q cont ih =>
+    simp only [PFunctor.FreeM.bind_eq_bind, run_interpret_bind, run_interpret_query, map_bind]
+    rw [← step q s, bind_map_left]
+    exact bind_congr fun (a, s') => ih a s'
+
+/-- Representing each PMF transition maps the joint output and final state of an adaptive run. -/
 theorem run_interpret_map_state
     (oracle : (q : ι) → StateT State PMF (spec q))
     (oracle' : (q : ι) → StateT State' PMF (spec q)) (represent : State → State')
@@ -199,8 +216,7 @@ theorem run_interpret_map_state
       oracle' q (represent s)) (program : OracleComp spec α) (s : State) :
     ((interpret oracle program).run s).map (fun (a, s') => (a, represent s')) =
       (interpret oracle' program).run (represent s) :=
-  run_interpret_map_state_of_invariant oracle oracle' represent (fun _ => True)
-    (by simp) (fun q s _ => step q s) program s trivial
+  map_state_run_interpret oracle oracle' represent step program s
 
 /-- Representing replies and private state commutes with adaptive execution. Oracle substitution
 supplies each target reply by mapping a source reply, including to adaptive continuations.

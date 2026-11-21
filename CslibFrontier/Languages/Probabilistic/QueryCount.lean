@@ -283,7 +283,7 @@ theorem IsCostBounded.transcript_cost_le {cost : Query → ℕ} {program : Oracl
   | liftBind q cont n _ ih =>
     simp only [interp_norm, Probability.PMF.monad_bind_eq_bind, PMF.mem_support_bind_iff] at hmem
     obtain ⟨⟨a, middle, seen⟩, hfirst, hrest⟩ := hmem
-    simp only [StateT.run, withTranscript, PMF.mem_support_map_iff] at hfirst
+    simp only [StateT.run, withTranscript_apply_pmf, PMF.mem_support_map_iff] at hfirst
     obtain ⟨⟨answer, next⟩, -, heq⟩ := hfirst
     cases heq
     rw [run_interpret_withTranscript_append, PMF.mem_support_map_iff] at hrest
