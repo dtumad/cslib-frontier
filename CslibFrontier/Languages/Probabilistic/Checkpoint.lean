@@ -109,8 +109,9 @@ The count excludes the selected request itself. -/
 
 @[simp] theorem queries_seek_succ {S : Type z} (answer : (q : Q) → S → spec q × S) (n : ℕ)
     (q : Q) (k : spec q → OracleComp spec α) (s : S) :
-    (seek answer (n + 1) (.liftBind q k) s).queries =
+    (seek answer (n + 1) ((PFunctor.FreeM.lift q).bind k) s).queries =
       q :: (seek answer n (k (answer q s).1) (answer q s).2).queries := by
+  rw [← PFunctor.FreeM.liftBind_eq]
   simp only [seek, queries_prepend]
 
 end Checkpoint

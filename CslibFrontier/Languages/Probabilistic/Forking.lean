@@ -136,7 +136,8 @@ theorem queries_checkpoint_runWithAnswers (default : H)
     cases n with
     | zero => rfl
     | succ n =>
-      simp only [Checkpoint.queries_seek_succ, runWithAnswers, List.take_succ_cons, ih]
+      exact (Checkpoint.queries_seek_succ _ n q k answers).trans
+        (congrArg (q :: ·) (ih (answers.headD default) answers.tail n))
 
 /-- The global tape position selects a query; its occurrence number counts only earlier
 requests with that same name. Out-of-range positions give no occurrence. -/
