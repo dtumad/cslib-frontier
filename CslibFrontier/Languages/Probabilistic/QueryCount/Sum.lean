@@ -9,6 +9,7 @@ module
 
 public import CslibFrontier.Languages.Probabilistic.QueryCount
 public import CslibFrontier.Languages.Probabilistic.Sum
+import CslibFrontier.Languages.Probabilistic.Oracle.Relabel
 
 /-!
 # Call budgets of programs over one side of a sum
@@ -41,21 +42,15 @@ variable {ι₁ ι₂ : Type u} {spec₁ : OracleSpec.{u, v} ι₁} {spec₂ : O
 on the sum charging each left call `.inl q` at most `cost₁ q`. -/
 theorem liftLeft {cost₁ : ι₁ → ℕ} {cost : ι₁ ⊕ ι₂ → ℕ} {program : OracleComp spec₁ α} {n : ℕ}
     (h : IsCostBounded cost₁ program n) (hcost : ∀ q, cost (.inl q) ≤ cost₁ q) :
-    IsCostBounded cost (OracleComp.liftLeft (spec₂ := spec₂) program) n := by
-  rw [OracleComp.liftLeft, OracleComp.substitute_eq_interpret]
-  exact IsCostBounded.interpret
-    (fun q => (IsCostBounded.query (spec := spec₁ ⊕ₒ spec₂) (cost := cost) (.inl q)).mono
-      (hcost q)) h
+    IsCostBounded cost (OracleComp.liftLeft (spec₂ := spec₂) program) n :=
+  IsCostBounded.relabel (target := spec₁ ⊕ₒ spec₂) Sum.inl (fun _ => id) (h.of_le hcost)
 
 /-- A budget `n` for a right program under `cost₂` is a budget for its embedding under every cost
 on the sum charging each right call `.inr q` at most `cost₂ q`. -/
 theorem liftRight {cost₂ : ι₂ → ℕ} {cost : ι₁ ⊕ ι₂ → ℕ} {program : OracleComp spec₂ α} {n : ℕ}
     (h : IsCostBounded cost₂ program n) (hcost : ∀ q, cost (.inr q) ≤ cost₂ q) :
-    IsCostBounded cost (OracleComp.liftRight (spec₁ := spec₁) program) n := by
-  rw [OracleComp.liftRight, OracleComp.substitute_eq_interpret]
-  exact IsCostBounded.interpret
-    (fun q => (IsCostBounded.query (spec := spec₁ ⊕ₒ spec₂) (cost := cost) (.inr q)).mono
-      (hcost q)) h
+    IsCostBounded cost (OracleComp.liftRight (spec₁ := spec₁) program) n :=
+  IsCostBounded.relabel (target := spec₁ ⊕ₒ spec₂) Sum.inr (fun _ => id) (h.of_le hcost)
 
 /-- A left program makes no call that a cost charging nothing on the left counts. -/
 theorem liftLeft_of_cost_inl_eq_zero {cost : ι₁ ⊕ ι₂ → ℕ} (hcost : ∀ q, cost (.inl q) = 0)

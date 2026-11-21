@@ -10,7 +10,7 @@ module
 public import CslibFrontier.Crypto.Protocols.UC.MultiSession
 import CslibFrontier.Crypto.Protocols.SSP.ParFinLazy
 import CslibFrontier.Languages.Probabilistic.Oracle.Interaction
-import CslibFrontier.Languages.Probabilistic.Oracle.Substitution
+import CslibFrontier.Languages.Probabilistic.Oracle.Relabel
 
 /-!
 # Universal composition with joint state (step theorems and lazy multi-session functionality)
@@ -376,34 +376,45 @@ private theorem link_liftAdversary_mapNetMachine {n : ℕ} {In Out NQ₁ NQ₂ R
         rw [hint, map_bind, map_bind]
         exact bind_congr fun x => ih x.1 x.2
 
-private def relabelSessionHandler {m n : ℕ} {SubIn SubOut BackQ BackR : Type} :
-    (q : Fin m × ((Fin n × SubIn) ⊕ RoutedNetQ n SubIn BackQ)) →
-      ProbOracleComp (protocolSpec n (SubSessionInput (Fin m) SubIn) SubOut
-        (RoutedNetQ n (SubSessionInput (Fin m) SubIn) (SubSessionBackdoor (Fin m) BackQ))
-        (RoutedNetR SubOut BackR))
-        ((SSP.sessionSpec m (protocolSpec n SubIn SubOut (RoutedNetQ n SubIn BackQ)
-          (RoutedNetR SubOut BackR))) q)
-  | (j, .inl (i, x)) => ProbOracleComp.query (Sum.inl (i, ⟨j, x⟩))
-  | (j, .inr (.inl (i, x))) => ProbOracleComp.query (Sum.inr (Sum.inl (i, ⟨j, x⟩)))
-  | (j, .inr (.inr bq)) => ProbOracleComp.query (Sum.inr (Sum.inr ⟨j, bq⟩))
+private abbrev SeparateSpec (m n : ℕ) (In Out BackQ BackR : Type) :=
+  SSP.sessionSpec m (protocolSpec n In Out (RoutedNetQ n In BackQ) (RoutedNetR Out BackR))
+
+private abbrev JointSpec (m n : ℕ) (In Out BackQ BackR : Type) :=
+  protocolSpec n (SubSessionInput (Fin m) In) Out
+    (RoutedNetQ n (SubSessionInput (Fin m) In) (SubSessionBackdoor (Fin m) BackQ))
+    (RoutedNetR Out BackR)
+
+/-- Move the session tag from the request header into the party input or the backdoor query.
+Each of the three routes retains its reply type. -/
+private def sessionRoute {m n : ℕ} {In Out BackQ BackR : Type}
+    (q : Fin m × ((Fin n × In) ⊕ RoutedNetQ n In BackQ)) :
+    (PFunctor.mk _ (JointSpec m n In Out BackQ BackR)).Obj
+      (SeparateSpec m n In Out BackQ BackR q) :=
+  match q with
+  | (j, .inl (i, x)) => ⟨.inl (i, ⟨j, x⟩), id⟩
+  | (j, .inr (.inl (i, x))) => ⟨.inr (.inl (i, ⟨j, x⟩)), id⟩
+  | (j, .inr (.inr bq)) => ⟨.inr (.inr ⟨j, bq⟩), id⟩
+
+private abbrev relabelSessionHandler {m n : ℕ} {SubIn SubOut BackQ BackR : Type}
+    (q : Fin m × ((Fin n × SubIn) ⊕ RoutedNetQ n SubIn BackQ)) :
+    ProbOracleComp (JointSpec m n SubIn SubOut BackQ BackR)
+      (SeparateSpec m n SubIn SubOut BackQ BackR q) :=
+  let route := sessionRoute (Out := SubOut) (BackR := BackR) q
+  route.2 <$> ProbOracleComp.query route.1
 
 private def relabelSessionProg {m n : ℕ} {SubIn SubOut BackQ BackR α : Type}
-    (prog : ProbOracleComp
-      (SSP.sessionSpec m
-        (protocolSpec n SubIn SubOut (RoutedNetQ n SubIn BackQ) (RoutedNetR SubOut BackR))) α) :
-    ProbOracleComp
-      (protocolSpec n (SubSessionInput (Fin m) SubIn) SubOut
-        (RoutedNetQ n (SubSessionInput (Fin m) SubIn) (SubSessionBackdoor (Fin m) BackQ))
-        (RoutedNetR SubOut BackR)) α :=
-  OracleComp.interpret
-    (sumHandler
-      (fun k => OracleComp.query
-        (spec := probOracleSpec (protocolSpec n (SubSessionInput (Fin m) SubIn) SubOut
-          (RoutedNetQ n (SubSessionInput (Fin m) SubIn) (SubSessionBackdoor (Fin m) BackQ))
-          (RoutedNetR SubOut BackR)))
-        (Sum.inl k))
-      relabelSessionHandler)
-    prog
+    (prog : ProbOracleComp (SeparateSpec m n SubIn SubOut BackQ BackR) α) :
+    ProbOracleComp (JointSpec m n SubIn SubOut BackQ BackR) α :=
+  let route := sessionRoute (m := m) (n := n) (In := SubIn) (Out := SubOut)
+    (BackQ := BackQ) (BackR := BackR)
+  ProbOracleComp.relabel (fun q => (route q).1) (fun q => (route q).2) prog
+
+private theorem relabelSessionProg_eq_interpret {m n : ℕ} {SubIn SubOut BackQ BackR α : Type}
+    (prog : ProbOracleComp (SeparateSpec m n SubIn SubOut BackQ BackR) α) :
+    relabelSessionProg prog = OracleComp.interpret
+      (sumHandler (fun k => OracleComp.query (spec := probOracleSpec _) (Sum.inl k))
+        relabelSessionHandler) prog :=
+  OracleComp.substitute_eq_interpret _ _
 
 private theorem interpret_liftParty_toJoint {m n : ℕ} {SubIn SubOut BackQ BackR α : Type}
     (prog : ProbOracleComp (multiPartySpec m n SubIn SubOut) α) :
@@ -421,7 +432,8 @@ private theorem interpret_liftParty_toJoint {m n : ℕ} {SubIn SubOut BackQ Back
         prog) =
       relabelSessionProg
         (liftMultiParty (NQ := RoutedNetQ n SubIn BackQ) (NR := RoutedNetR SubOut BackR) prog) := by
-  dsimp only [liftParty, liftMultiParty, relabelSessionProg]
+  rw [relabelSessionProg_eq_interpret]
+  dsimp only [liftParty, liftMultiParty]
   erw [OracleComp.interpret_interpret, OracleComp.interpret_interpret]
   congr 1 with r : 1
   cases r with
@@ -464,24 +476,11 @@ private theorem link_toJoint_eq_relabelSessionProg {m n : ℕ}
               (RoutedNetR Out (NetR ⊕ RoutedNetR SubOut BackR)))
             demuxNetQuery)
           prog) sρ)
-  rw [relabelSessionProg, OracleComp.interpret_bind]
-  have hsamp :
-      OracleComp.interpret
-        (sumHandler
-          (fun k => OracleComp.query
-            (spec := probOracleSpec (protocolSpec n (SubSessionInput (Fin m) SubIn) SubOut
-              (RoutedNetQ n (SubSessionInput (Fin m) SubIn) (SubSessionBackdoor (Fin m) BackQ))
-              (RoutedNetR SubOut BackR)))
-            (Sum.inl k))
-          relabelSessionHandler)
-        (ProbOracleComp.sample (spec := SSP.sessionSpec m (protocolSpec n SubIn SubOut
-          (RoutedNetQ n SubIn BackQ) (RoutedNetR SubOut BackR))) (ρ κ C).init) =
-      ProbOracleComp.sample (ρ κ C).init := by
-    rw [ProbOracleComp.interpret_sample]
-    exact (OracleComp.substitute_eq_interpret _ _).symm
-  rw [hsamp]
+  change _ = ProbOracleComp.simulate relabelSessionHandler _
+  rw [ProbOracleComp.simulate_bind, ProbOracleComp.simulate_sample]
   refine congrArg _ (funext fun sρ => ?_)
-  rw [OracleComp.interpret_map]
+  rw [ProbOracleComp.simulate, OracleComp.substitute_eq_interpret, OracleComp.interpret_map]
+  simp only [ProbOracleComp.sample_unifFin]
   refine congrArg (Prod.fst <$> ·) ?_
   induction prog using OracleComp.induction generalizing sρ with
   | pure a => rfl
@@ -508,7 +507,8 @@ private theorem link_toJoint_eq_relabelSessionProg {m n : ℕ}
           exact ih none sρ
         · simp only [routeCorrupt, hp, ↓reduceIte, hybridWrap, multiHybridWrap,
             MultiHybridProtocol.toJoint, StateT.run]
-          erw [interpret_liftParty_toJoint (((ρ κ C).handle (.inl p)).run sρ)]
+          erw [interpret_liftParty_toJoint (((ρ κ C).handle (.inl p)).run sρ),
+            relabelSessionProg_eq_interpret]
           exact bind_congr fun x => ih x.1 x.2
       | inr nq =>
         erw [ProbOracleComp.simulate_query]
@@ -521,7 +521,8 @@ private theorem link_toJoint_eq_relabelSessionProg {m n : ℕ}
               MultiHybridProtocol.toJoint]
             repeat erw [StateT.run_map]
             simp only [StateT.run]
-            erw [interpret_liftParty_toJoint (((ρ κ C).handle (.inl (i, x))).run sρ)]
+            erw [interpret_liftParty_toJoint (((ρ κ C).handle (.inl (i, x))).run sρ),
+              relabelSessionProg_eq_interpret]
             erw [OracleComp.interpret_map, bind_map_left, bind_map_left]
             exact bind_congr fun p => ih (Sum.inl p.1) p.2
           · simp only [routeCorrupt, hi, ↓reduceIte, StateT.run]
@@ -534,7 +535,8 @@ private theorem link_toJoint_eq_relabelSessionProg {m n : ℕ}
           simp only [StateT.run_map]
           simp only [StateT.run]
           erw [liftParty_map, liftMultiParty_map]
-          erw [interpret_liftParty_toJoint (((ρ κ C).handle (.inr q)).run sρ)]
+          erw [interpret_liftParty_toJoint (((ρ κ C).handle (.inr q)).run sρ),
+            relabelSessionProg_eq_interpret]
           erw [OracleComp.interpret_map, OracleComp.interpret_map]
           simp only [Functor.map_map, bind_map_left]
           exact bind_congr fun (x : NetR × _) => ih (Sum.inr (Sum.inl x.1)) x.2
@@ -546,7 +548,7 @@ private theorem link_toJoint_eq_relabelSessionProg {m n : ℕ}
           repeat erw [StateT.run_lift]
           simp only [bind_pure_comp, Functor.map_map, bind_map_left]
           erw [OracleComp.interpret_map, OracleComp.interpret_query]
-          dsimp only [sumHandler, relabelSessionHandler]
+          dsimp only [sumHandler, relabelSessionHandler, sessionRoute]
           rw [bind_map_left]
           exact bind_congr fun r => ih (Sum.inr (Sum.inr r)) sρ
 
@@ -591,7 +593,8 @@ private theorem eval_run_multiSession_relabel {m n : ℕ}
             (sumHandler (fun k => OracleComp.query (spec := probOracleSpec _) (Sum.inl k))
               stripHandler q))
         prog := by
-    dsimp only [relabelSessionProg, stripProg]
+    rw [relabelSessionProg_eq_interpret]
+    dsimp only [stripProg]
     exact OracleComp.interpret_interpret _ _ prog
   have hP₂ : (P₂.run (relabelSessionProg prog)).eval =
       (P₂.run (relabelSessionProg stripProg)).eval := by
@@ -599,7 +602,7 @@ private theorem eval_run_multiSession_relabel {m n : ℕ}
     rw [show P₂.init = pure { secParam := κ, corrupted := C, sessions := fun _ => none } from rfl]
     erw [ProbComp.eval_pure, PMF.pure_bind, PMF.pure_bind]
     rw [h_rs]
-    dsimp only [relabelSessionProg]
+    rw [relabelSessionProg_eq_interpret]
     erw [OracleComp.interpret_interpret, OracleComp.interpret_interpret]
     have hint :
         OracleComp.interpret (m := StateT P₂.State PMF)
@@ -619,16 +622,16 @@ private theorem eval_run_multiSession_relabel {m n : ℕ}
       · rfl
       · dsimp only [sumHandler, stripHandler]
         by_cases hi : i ∈ C
-        · simp only [hi, ↓reduceIte, OracleComp.interpret_pure, relabelSessionHandler]
+        · simp only [hi, ↓reduceIte, OracleComp.interpret_pure, relabelSessionHandler, sessionRoute]
           ext s
           erw [OracleComp.interpret_query, StateT.run_pure]
           simp only [P₂, corruptRouter, hi, ↓reduceIte, Machine.handler, sumHandler]
           rfl
-        · simp [hi, relabelSessionHandler]
+        · simp [hi, relabelSessionHandler, sessionRoute]
       · dsimp only [sumHandler, stripHandler]
         by_cases hi : i ∈ C
-        · simp [hi, relabelSessionHandler]
-        · simp only [hi, ↓reduceIte, OracleComp.interpret_pure, relabelSessionHandler]
+        · simp [hi, relabelSessionHandler, sessionRoute]
+        · simp only [hi, ↓reduceIte, OracleComp.interpret_pure, relabelSessionHandler, sessionRoute]
           ext s
           erw [OracleComp.interpret_query, StateT.run_pure]
           simp only [P₂, corruptRouter, hi, ↓reduceIte, Machine.handler, sumHandler]
