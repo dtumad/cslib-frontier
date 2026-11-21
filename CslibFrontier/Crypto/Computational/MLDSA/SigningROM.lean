@@ -12,7 +12,7 @@ public import CslibFrontier.Crypto.Protocols.Signature.RandomOracle
 import CslibFrontier.Crypto.Game.CloseTo.RejectedProgramming
 import CslibFrontier.Languages.Probabilistic.Simulation
 public import CslibFrontier.Languages.Probabilistic.RandomOracle.Programming
-import CslibFrontier.Languages.Probabilistic.QueryCount.Scale
+import CslibFrontier.Languages.Probabilistic.QueryCount.Demand
 import CslibFrontier.Languages.Probabilistic.Traverse.FindM
 
 /-!
@@ -60,35 +60,34 @@ accepted signature. Direct digest requests pass through unchanged. -/
       query (spec := SigningROMSpec P Digest) (.inl msg))
     (fun point => query (.inr point))) program
 
-private theorem cost_expandSigningRetries (K s h : ℕ)
-    {program : OracleComp (SigningROMSpec P Digest) α}
-    {bound : ℕ}
-    (hb : IsCostBounded (Sum.elim (fun _ => K * s) (fun _ => h)) program bound) :
-    IsCostBounded (Sum.elim (fun _ => s) (fun _ => h))
-      (expandSigningRetries P K program) bound := by
-  refine hb.interpret fun q => ?_
-  cases q with
-  | inl msg =>
-    simp only [Sum.elim_inl]
-    simpa only [List.length_range] using
-      (IsCostBounded.findSomeM? (xs := List.range K) (n := s)
-        (f := fun _ => query (spec := SigningROMSpec P Digest) (.inl msg))
-        (cost := Sum.elim (fun _ => s) (fun _ => h))
-        (fun _ _ => IsCostBounded.query (spec := SigningROMSpec P Digest) (.inl msg)))
-  | inr point => exact IsCostBounded.query _
-
 private theorem costs_expandSigningRetries (K : ℕ)
     {program : OracleComp (SigningROMSpec P Digest) α}
     {S H : ℕ} (hS : IsCostBounded signingCost program S) (hH : IsCostBounded hashCost program H) :
     IsCostBounded (Sum.elim (fun _ => 1) (fun _ => 0)) (expandSigningRetries P K program) (S * K) ∧
     IsCostBounded (Sum.elim (fun _ => 0) (fun _ => 1)) (expandSigningRetries P K program) H := by
-  constructor
-  · exact cost_expandSigningRetries P K 1 0 (hS.mul_of_le (c := K) (by
-      intro q
-      cases q <;> simp [signingCost]))
-  · exact cost_expandSigningRetries P K 0 1 (hH.of_le (by
-      intro q
-      cases q <;> simp [hashCost]))
+  let cost (j : Bool) : List Bool ⊕ SigningHashPoint P → ℕ :=
+    Sum.elim (fun _ => if j then 0 else 1) (fun _ => if j then 1 else 0)
+  let budget (i : Bool) := if i then H else S
+  let demand (i j : Bool) : ℕ := if i then (if j then 1 else 0) else K * (if j then 0 else 1)
+  have bound : ∀ i, IsCostBounded (cost i) program (budget i) := by
+    rintro (_ | _)
+    · exact hS.of_le (by intro q; cases q <;> rfl)
+    · exact hH.of_le (by intro q; cases q <;> rfl)
+  have hx (j : Bool) : IsCostBounded (cost j) (expandSigningRetries P K program)
+      (∑ i, budget i * demand i j) := by
+    refine IsCostBounded.interpret_demand cost cost demand _ ?_ bound j
+    intro q c
+    cases q with
+    | inl m =>
+      simpa [cost, demand, Fintype.sum_bool] using
+        (IsCostBounded.findSomeM? (xs := List.range K) (n := if c then 0 else 1)
+          (f := fun _ => query (spec := SigningROMSpec P Digest) (.inl m))
+          (cost := cost c) (fun _ _ => IsCostBounded.query _))
+    | inr point =>
+      simpa [cost, demand, Fintype.sum_bool] using
+        (IsCostBounded.query (spec := SigningROMSpec P Digest) (cost := cost c) (.inr point))
+  exact ⟨by simpa [cost, budget, demand, Fintype.sum_bool] using hx false,
+    by simpa [cost, budget, demand, Fintype.sum_bool] using hx true⟩
 
 /-- The largest atom of `HighBits(A y)` when `y` is one ideal signing mask. -/
 @[expose] noncomputable def commitmentGuessProbability (hγ : 0 < P.γ₁)

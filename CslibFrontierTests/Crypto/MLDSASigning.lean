@@ -226,4 +226,15 @@ example :
     (tapes.countP (readAfterRejection true), tapes.countP (readAfterRejection false)) = (1, 2) := by
   decide +kernel
 
+-- With zero trials, a signing request returns failure without consulting either oracle.
+example (P : Params) (m : List Bool) :
+    expandSigningRetries P 0 (Cslib.OracleComp.query (spec := SigningROMSpec P Bool) (.inl m)) =
+      pure none := by simp [expandSigningRetries, Cslib.OracleComp.sumHandler]
+
+-- A direct digest request still forwards its call when the signer has zero trials.
+example (P : Params) (x : SigningHashPoint P) :
+    expandSigningRetries P 0 (Cslib.OracleComp.query (spec := SigningROMSpec P Bool) (.inr x)) =
+      Cslib.OracleComp.query (spec := SigningROMSpec P Bool) (.inr x) := by
+  simp [expandSigningRetries, Cslib.OracleComp.sumHandler]
+
 end MLDSASigningTests
