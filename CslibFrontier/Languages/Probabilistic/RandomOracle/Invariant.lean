@@ -27,8 +27,8 @@ from the pointwise support of `dist` returns `PMF.pure a` under `RandomOracle.an
 A partial interpretation runs the same program in `Option`, stopping at the first missing
 answer. Every supported run succeeds under its own final cache. A handler that answers the
 cached calls without changing its state then repeats the result with that entire state intact.
-These settlement and replay laws adapt Alexander Hicks's `QueryCache.toPartialImpl` laws in
-VCVio (`VCVio/OracleComp/QueryTracking/RandomOracle/CachePartial.lean`).
+These settlement and replay laws adapt Alexander Hicks's `QueryCache.toPartialImpl` laws
+from VCVio's random-oracle query-tracking library.
 
 ## Main definitions
 
