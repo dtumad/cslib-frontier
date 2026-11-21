@@ -7,7 +7,7 @@ Authors: Samuel Schlesinger
 module
 -- upstream: candidate
 
-public import CslibFrontier.Computability.DecisionTree.Cost
+public import CslibFrontier.Computability.DecisionTree.FreeM
 public import Mathlib.Basic.Finite.Sigma
 
 /-!
@@ -152,6 +152,31 @@ theorem substitute_node (i : ι) (left right : DecisionTree ι β)
     (node i left right).substitute s =
       (s i).bind (fun b => cond b (right.substitute s) (left.substitute s)) := rfl
 
+/-- Translating a tree into a free program preserves leaf substitution. -/
+theorem toFreeM_bind (t : DecisionTree ι β) (k : β → DecisionTree ι γ) :
+    (t.bind k).toFreeM = PFunctor.FreeM.bind t.toFreeM (fun a => (k a).toFreeM) := by
+  induction t with
+  | leaf a => rfl
+  | node i l r il ir =>
+    rw [node_bind]
+    change PFunctor.FreeM.liftBind (P := PFunctor.monomial ι Bool) i _ =
+      PFunctor.FreeM.liftBind (P := PFunctor.monomial ι Bool) i _
+    congr 1
+    funext b
+    cases b <;> assumption
+
+/-- Substituting Boolean query subroutines agrees with free-program substitution. -/
+theorem toFreeM_substitute (t : DecisionTree ι β) (s : ι → DecisionTree κ Bool) :
+    (t.substitute s).toFreeM = OracleComp.substitute (fun i => (s i).toFreeM) t.toFreeM := by
+  induction t with
+  | leaf a => rfl
+  | node i l r il ir =>
+    rw [substitute_node, toFreeM_bind]
+    change PFunctor.FreeM.bind (s i).toFreeM _ = PFunctor.FreeM.bind (s i).toFreeM _
+    congr 1
+    funext b
+    cases b <;> assumption
+
 /-- Replacing queries by single-query trees is ordinary query relabelling. -/
 @[simp] theorem substitute_mapQueries (t : DecisionTree ι β) (f : ι → κ) :
     t.substitute (fun i => node (f i) (leaf false) (leaf true)) = t.mapQueries f := by
@@ -174,12 +199,8 @@ theorem substitute_bind (t : DecisionTree ι β) (k : β → DecisionTree ι γ)
 theorem substitute_assoc (t : DecisionTree ι β) (s : ι → DecisionTree κ Bool)
     (r : κ → DecisionTree μ Bool) :
     (t.substitute s).substitute r = t.substitute (fun i => (s i).substitute r) := by
-  induction t with
-  | leaf => rfl
-  | node i left right ihl ihr =>
-    rw [substitute_node, substitute_bind, substitute_node]
-    congr 1 with b : 1
-    cases b <;> simp [ihl, ihr]
+  apply equivFreeM.injective
+  simp only [equivFreeM_apply, toFreeM_substitute, OracleComp.substitute_substitute]
 
 /-- Query substitution evaluates the outer tree on the answers supplied by the inner trees. -/
 @[simp] theorem eval_substitute (t : DecisionTree ι β) (s : ι → DecisionTree κ Bool)
