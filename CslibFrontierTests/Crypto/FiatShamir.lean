@@ -149,6 +149,20 @@ example :
         ⟨[(.inr true, 9, some 2), (.inl (true, 0), 7, some 1), (.inr false, 3, some 0)],
           [], 3, []⟩), [.inr false, .inl (true, 0), .inr true]) := by rfl
 
+-- The third fresh backend query names the second junk key for the first time.
+example :
+    (OracleComp.Checkpoint.seek (fun _ (s : List (ZMod 11)) => (s.headD 0, s.tail)) 2
+      ((OracleComp.interpret (ForkingReduction.handler (FiatShamir.signer extendedHashPoint))
+        mixedHashQueries).run ⟨[], [], 0, []⟩) [3, 7, 9]).occurrence? =
+        some (.inr true, 0) := by rfl
+
+-- The checkpoint indexes the backend tape. The fourth adversary query above hits the cache,
+-- so there is no fourth backend query.
+example :
+    (OracleComp.Checkpoint.seek (fun _ (s : List (ZMod 11)) => (s.headD 0, s.tail)) 3
+      ((OracleComp.interpret (ForkingReduction.handler (FiatShamir.signer extendedHashPoint))
+        mixedHashQueries).run ⟨[], [], 0, []⟩) [3, 7, 9]).occurrence? = none := by rfl
+
 -- Programming a signature retains a previously cached junk key and records only its own message.
 example :
     OracleComp.runWithAnswers (0 : ZMod 11)
