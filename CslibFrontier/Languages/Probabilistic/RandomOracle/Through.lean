@@ -14,7 +14,7 @@ public import CslibFrontier.Languages.Probabilistic.Oracle.Substitution
 public import CslibFrontier.Probability.StatisticalDistance.CloseTo
 import CslibFrontier.Foundations.Data.List.SortedAssoc
 import CslibFrontier.Languages.Probabilistic.Oracle.Simulation
-import CslibFrontier.Languages.Probabilistic.Oracle.Substitution.RunWith
+import CslibFrontier.Languages.Probabilistic.Oracle.Relabel
 import CslibFrontier.Languages.Probabilistic.UntilBad.Flag
 
 /-!
@@ -164,7 +164,7 @@ private theorem runWith_memoizeThrough_map_fst (φ : M → Y) (dist : PMF Z)
     (program : ProbOracleComp (fun _ : M => Z) α) :
     (ProbOracleComp.runWith (memoizeThrough φ dist) program []).map Prod.fst =
       (ProbOracleComp.runWith (answer fun _ : Y => dist)
-        (ProbOracleComp.simulate (fun m => ProbOracleComp.query (φ m)) program)
+        (ProbOracleComp.relabel (target := fun _ : Y => Z) φ (fun _ => id) program)
         (fun _ => none)).map Prod.fst := by
   have h := ProbOracleComp.runWith_map_state (memoizeThrough φ dist)
     (fun m => answer (fun _ : Y => dist) (φ m))
@@ -172,12 +172,8 @@ private theorem runWith_memoizeThrough_map_fst (φ : M → Y) (dist : PMF Z)
     (fun m cache => memoizeThrough_map_ofList φ dist m cache) program []
   have h' := congrArg (PMF.map Prod.fst) h
   simp only [PMF.map_comp, Function.comp_def, List.map_nil, ofList_nil] at h'
-  have hq : (fun m => ProbOracleComp.runWith (answer fun _ : Y => dist)
-      (ProbOracleComp.query (spec := fun _ : Y => Z) (φ m))) =
-      fun m => answer (fun _ : Y => dist) (φ m) :=
-    funext fun m => funext fun s => ProbOracleComp.runWith_query _ _ _
-  rw [ProbOracleComp.runWith_simulate, hq]
-  exact h'
+  rw [ProbOracleComp.runWith_relabel]
+  simpa only [Prod.map_id, PMF.map_id] using h'
 
 /-- **A lazily sampled function called through `φ`.** Replacing each query `m` of `program` by the
 query `φ m` to a lazily sampled function on `Y` changes the law of the result by at most the
@@ -191,7 +187,7 @@ theorem closeTo_runWith_memoize_simulate_query (φ : M → Y) (dist : PMF Z)
         (fun _ => none)).map Prod.fst)
       ((ProbOracleComp.runWith (memoize fun _ : M => dist) program []).toOuterMeasure
         {x | HasImageCollision φ x.2}) := by
-  rw [← runWith_memoizeThrough_map_fst]
+  erw [← runWith_memoizeThrough_map_fst φ dist program]
   exact ((identicalUntilBad_memoizeThrough φ dist).symm.probOracleComp.closeTo_run program []).map
     Prod.fst
 
