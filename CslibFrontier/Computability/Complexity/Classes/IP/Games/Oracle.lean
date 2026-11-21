@@ -549,7 +549,7 @@ private theorem exists_transcript_ge_of_after {γ : Type} (p : WordQueryComp Uni
     rw [hafter, hq, OracleComp.interpret_bind, OracleComp.interpret_query, StateT.run_bind]
     have hq : (OracleComp.withTranscript oracle ((), m)).run ([], tr) =
         PMF.pure ([], [], ⟨((), m), []⟩ :: tr) := by
-      simp [OracleComp.withTranscript_apply_pmf, oracle, StateT.run]
+      simp [oracle, StateT.run]
     rw [hq, Probability.PMF.monad_bind_eq_bind, PMF.pure_bind]
     obtain ⟨⟨out, s', tr'⟩, hmem⟩ := PMF.support_nonempty
       ((OracleComp.interpret (OracleComp.withTranscript oracle) (next [])).run
@@ -583,7 +583,7 @@ private theorem exists_transcript_ge_of_after {γ : Type} (p : WordQueryComp Uni
         rw [hq', OracleComp.interpret_bind, OracleComp.interpret_query, StateT.run_bind]
         have hq : (OracleComp.withTranscript oracle ((), m')).run ((m', y') :: h, tr) =
             PMF.pure (y', h, ⟨((), m'), y'⟩ :: tr) := by
-          simp [OracleComp.withTranscript_apply_pmf, oracle, StateT.run]
+          simp [oracle, StateT.run]
         rw [hq, Probability.PMF.monad_bind_eq_bind, PMF.pure_bind]
         exact hmem
 

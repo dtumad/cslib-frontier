@@ -61,6 +61,6 @@ theorem run_interpret_withTranscript_append
   apply ProbOracleComp.runWith_map_state (withTranscript oracle) (withTranscript oracle)
     (fun state => (state.1, state.2 ++ transcript))
   intro q state
-  simp [withTranscript_apply_pmf, PMF.map_comp, Function.comp_def]
+  simp [PMF.map_comp, Function.comp_def]
 
 end Cslib.ProbOracleComp

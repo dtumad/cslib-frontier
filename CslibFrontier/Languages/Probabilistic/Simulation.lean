@@ -204,7 +204,7 @@ theorem map_state_run_interpret
   induction program using OracleComp.induction generalizing s with
   | pure a => simp
   | query_bind q cont ih =>
-    simp only [run_interpret_bind, run_interpret_query, map_bind]
+    simp only [PFunctor.FreeM.bind_eq_bind, run_interpret_bind, run_interpret_query, map_bind]
     rw [← step q s, bind_map_left]
     exact bind_congr fun (a, s') => ih a s'
 

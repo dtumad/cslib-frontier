@@ -607,7 +607,8 @@ private theorem bidirDedupStep_transcript_inv {β σ : Type}
       supp_cases hmem [pmf_norm, OracleComp.interpret_bind, OracleComp.interpret_query,
         OracleComp.interpret_pure, StateT.run_bind, StateT.run_pure] with
         ⟨⟨a, s₁, tr₁⟩, hfirst, hrest⟩
-      supp_cases hfirst [StateT.run, OracleComp.withTranscript_apply_pmf] with ⟨⟨a', _⟩, -, rfl, rfl, rfl⟩
+      supp_cases hfirst [StateT.run, OracleComp.withTranscript_apply_pmf]
+        with ⟨⟨a', _⟩, -, rfl, rfl, rfl⟩
       rw [OracleComp.run_interpret_withTranscript_append] at hrest
       supp_cases hrest with ⟨⟨⟨_, _⟩, _, fresh⟩, hfresh, ⟨rfl, rfl⟩, rfl, rfl⟩
       obtain ⟨hceq, hnodup, hmiss⟩ := ih a' hfresh

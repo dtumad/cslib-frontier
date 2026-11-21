@@ -295,7 +295,8 @@ theorem toOuterMeasure_bad_forgetfulWithBad_le {β : Type}
     simp only [forgetfulWithBad, PMF.toOuterMeasure_map_apply, Set.preimage_ofPred_eq]
     cases hq : cachedAnswer (c q.1) q.2 with
     | some a =>
-      simp [RandomPermutation.forgetfulWithBad_of_cachedAnswer_eq_some hq, PMF.toOuterMeasure_pure_apply]
+      simp [RandomPermutation.forgetfulWithBad_of_cachedAnswer_eq_some hq,
+        PMF.toOuterMeasure_pure_apply]
     | none =>
       have hpre : (fun a : Block => (a, (PermQuery.toCacheEntry ⟨q.2, a⟩ :: c q.1,
           false || decide (a ∉ freshAnswers (c q.1) q.2)))) ⁻¹'

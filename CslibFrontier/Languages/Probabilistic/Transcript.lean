@@ -44,7 +44,7 @@ namespace Cslib.OracleComp
 universe u v
 
 variable {Query : Type u} {Response : Query → Type u} {State α : Type u}
-variable {m : Type u → Type v} [Monad m]
+variable {m : Type u → Type v} [Functor m]
 
 /-- Queries and their typed replies, stored in reverse chronological order. -/
 abbrev Transcript (Response : Query → Type u) := List ((q : Query) × Response q)

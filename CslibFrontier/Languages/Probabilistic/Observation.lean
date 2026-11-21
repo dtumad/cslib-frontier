@@ -14,7 +14,8 @@ public import CslibFrontier.Languages.Probabilistic.Simulation
 
 `withObserver` runs an oracle once, then updates an observation using the request, reply and
 both private states. The observation cannot affect the oracle or perform another effect.
-This covers transcripts, response-sensitive statistics and accumulated execution costs.
+Typed transcripts record the request and reply. The forgetful random-permutation handler
+uses the pre-call cache and sampled reply to mark collisions in the PRP/PRF switching game.
 
 ## Main results
 
@@ -23,9 +24,9 @@ This covers transcripts, response-sensitive statistics and accumulated execution
   with adaptive execution.
 * `run_interpret_withObserver_prod`: two observers can be fused into one product observer.
 
-This specializes PolyFun’s `PFunctor.Handler.Stateful.extend` and its projection law to
-CSLib’s oracle-program interpreter.
-The statements use the existing `OracleComp` interpreter and hold for any lawful base monad.
+The construction adapts `PFunctor.Handler.Stateful.extend` and `run_extend_map_fst` from
+[PolyFun](https://github.com/Verified-zkEVM/PolyFun/blob/713d8857e49d20927c1447b3ba7397acc5537319/PolyFun/PFunctor/Handler/Stateful/Combinators.lean#L214-L246).
+Its execution laws use the existing `OracleComp` interpreter and hold for any lawful base monad.
 -/
 
 public section
@@ -35,7 +36,11 @@ namespace Cslib.OracleComp
 universe u v w
 
 variable {Query : Type u} {Response : Query → Type v} {State α Obs : Type v}
-variable {m : Type v → Type w} [Monad m]
+variable {m : Type v → Type w}
+
+section
+
+variable [Functor m]
 
 /-- Run the oracle once, then update a passive observation from the call's two states and reply.
 The observation update is pure and cannot change the reply or the private state. -/
@@ -55,15 +60,17 @@ def withObserver (oracle : (q : Query) → StateT State m (Response q))
   rcases state with ⟨s, observation⟩
   rfl
 
-variable [LawfulMonad m]
-
 /-- Erasing the observation from a single answer retains its reply and final private state. -/
-theorem map_fst_withObserver (oracle : (q : Query) → StateT State m (Response q))
+theorem map_fst_withObserver [LawfulFunctor m] (oracle : (q : Query) → StateT State m (Response q))
     (update : (q : Query) → State → Response q → State → Obs → Obs)
     (q : Query) (state : State × Obs) :
     (fun (answer, next, _) => (answer, next)) <$> withObserver oracle update q state =
       oracle q state.1 := by
   simp [Functor.map_map]
+
+end
+
+variable [Monad m] [LawfulMonad m]
 
 /-- Forgetting observation preserves the result and the complete final private state. -/
 theorem run_interpret_withObserver (oracle : (q : Query) → StateT State m (Response q))

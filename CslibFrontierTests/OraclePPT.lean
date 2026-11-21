@@ -87,7 +87,7 @@ private theorem run_duplicatedRequests :
         ([⟨false, true⟩, ⟨false, false⟩] : OracleComp.Transcript (fun _ : Bool => Bool))) := by
   simp only [duplicatedRequests, ProbOracleComp.runWith_bind, ProbOracleComp.runWith_sample,
     ProbOracleComp.runWith_query, ProbOracleComp.runWith_pure]
-  simp [OracleComp.withTranscript_apply_pmf, flipOracle, Function.comp_def]
+  simp [flipOracle, Function.comp_def]
 
 example : ¬duplicatedRequests.IsQueryBounded 1 := by
   intro h
@@ -275,7 +275,7 @@ example (n : ℕ) :
         fun state : ℕ => PMF.pure (List.replicate n true, state + 1))) (requestHead []) (7, []) =
       PMF.pure ((List.replicate n true).take 1, 8, [⟨((), []), List.replicate n true⟩]) := by
   rw [requestHead, ProbOracleComp.runWith_map, ProbOracleComp.runWith_query]
-  simp [OracleComp.withTranscript_apply_pmf]
+  simp
 
 -- Returning an unrestricted oracle reply cannot satisfy a uniform strict polynomial clock.
 example : ¬ IsOraclePPTOn encBits encBits

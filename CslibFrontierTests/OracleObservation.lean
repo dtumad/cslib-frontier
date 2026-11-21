@@ -54,6 +54,12 @@ private def record : (q : Request) → Nat → Reply q → Nat → List Nat → 
   | .read, before, answer, after, seen => seen ++ [before, answer, after]
   | .advance, before, answer, after, seen => seen ++ [before, if answer then 1 else 0, after]
 
+-- A program without requests keeps its initial observation and performs no effects.
+example : ((interpret (withObserver oracle record) (pure ())).run (4, [99])).run 7 =
+    (((), 4, [99]), 7) := by
+  rw [run_interpret_pure]
+  rfl
+
 -- Detect reversed observations, lost initial observations, wrong states or repeated effects.
 example : ((interpret (withObserver oracle record) program).run (4, [99])).run 0 =
     (((4, true, 5), 5, [99, 4, 4, 4, 4, 1, 5, 5, 5, 5]), 3) := by
@@ -70,15 +76,7 @@ example : ((fun (result, state, _) => (result, state)) <$>
     StateT.run_bind, StateT.run_pure, oracle]
   rfl
 
--- Fusing two observers still performs exactly three oracle effects.
-example : ((interpret (withObserver (withObserver oracle record)
-    (fun _ _ _ _ count => count + 1)) program).run ((4, [99]), 7)).run 0 =
-      (((4, true, 5), (5, [99, 4, 4, 4, 4, 1, 5, 5, 5, 5]), 10), 3) := by
-  simp only [program, run_interpret_bind, run_interpret_query, run_interpret_pure,
-    withObserver_apply, StateT.run_bind, StateT.run_map, StateT.run_pure, oracle, record]
-  rfl
-
--- The product law observes the very same answers and state transitions.
+-- Applying the product law collects both observations over exactly three oracle effects.
 example :
     ((fun (a, (s, log), n) => (a, s, log, n)) <$>
       (interpret (withObserver (withObserver oracle record)
@@ -118,9 +116,10 @@ example (bad : Bool) :
 -- On a miss, false collides with the previously occupied range while true is fresh.
 example :
     forgetfulWithBad (.forward true) ([(false, false)], false) =
-      (PMF.uniformOfFintype Bool).map
+      (Probability.PMF.uniformOfFintype Bool).map
         (fun a => (a, [(true, a), (false, false)], !a)) := by
-  rw [forgetfulWithBad_of_cachedAnswer_eq_none (by decide)]
+  rw [forgetfulWithBad_of_cachedAnswer_eq_none (q := .forward true)
+    (cache := [(false, false)]) (by decide)]
   congr 1
   funext a
   cases a <;> decide

@@ -217,7 +217,7 @@ theorem isCostBounded_of_transcript_cost_le [hne : ∀ q, Nonempty (spec q)] {co
           | some state => (oracle q' state).map fun (b, state') => (b, some state')
         have hlift := runWith_map_state (withTranscript oracle) (withTranscript oracle')
           (fun state => (some state.1, state.2)) (fun q' state => by
-            simp [withTranscript_apply_pmf, oracle', PMF.map_comp, Function.comp_def]) (cont a) (s, [])
+            simp [oracle', PMF.map_comp, Function.comp_def]) (cont a) (s, [])
         have hwhole := h (Option State) oracle' none (some s') result
           (transcript ++ [⟨q, a⟩]) (by
             rw [hrun, PMF.mem_support_bind_iff]
