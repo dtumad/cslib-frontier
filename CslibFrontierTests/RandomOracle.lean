@@ -4,7 +4,7 @@ Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Samuel Schlesinger
 -/
 
-import CslibFrontier.Languages.Probabilistic.RandomOracle
+import CslibFrontier.Languages.Probabilistic.RandomOracle.Invariant
 
 /-! Adaptive lazy sampling, complete private state, and concrete query/cache bounds. -/
 
@@ -82,5 +82,25 @@ example :
   simpa only [ProbComp.eval_uniform] using
     Cslib.RandomOracle.eval_run_interpret_memoize_eq_eager
       (fun _ : Bool => ProbComp.uniform Bool) adaptive
+
+-- A repeated key uses the first list entry. The full cache and the sampler's counter survive
+-- replay, including the shadowed duplicate and the unused key.
+example : ((OracleComp.interpret (memoize counted) (do
+    let x ← OracleComp.query (spec := fun _ : Bool => ℕ) false
+    let y ← OracleComp.query false
+    return x + y)).run [(false, 4), (false, 9), (true, 3)]).run 7 =
+      ((8, [(false, 4), (false, 9), (true, 3)]), 7) := by
+  apply congrArg (fun action : StateM ℕ (ℕ × List (Bool × ℕ)) => action.run 7)
+    (OracleComp.run_interpret_eq_pure_of_interpret_some
+      (fun q : Bool => if q then none else some 4) (memoize counted)
+      [(false, 4), (false, 9), (true, 3)] ?_ _ (by rfl))
+  intro q v hv
+  cases q with
+  | false => cases Option.some.inj hv; rfl
+  | true => simp at hv
+
+-- Sampling cannot repair a missing adaptive answer in a partial replay.
+example : OracleComp.interpret (fun q : Bool => if q then none else some true) adaptive =
+    none := rfl
 
 end CslibFrontierTests.RandomOracle

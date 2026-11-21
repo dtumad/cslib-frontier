@@ -1926,6 +1926,21 @@ child-table equations remain local mathematical obligations. These eager tables 
 prove distributional equalities; the executable reductions retain their existing separate
 runtime and query-bound certificates.
 
+## Replay an oracle program from its final cache
+
+Read an adaptive program `p` in a partial cache `c` with `OracleComp.interpret c p`. A result
+`some a` means the cache holds each answer that this execution needed. A missing key stops the
+read immediately. A supported lazy run always succeeds on its own final cache. To replay against
+a live handler, prove that each assigned key returns its stored value and preserves the live
+state. `OracleComp.run_interpret_eq_pure_of_interpret_some` then gives the joint result and
+unchanged state. This also applies to a list cache with unrelated entries or shadowed duplicates.
+
+In an honest Merkle opening, leaf and parent construction have already queried every node that
+verification hashes, including the final root input. `runWith_merkleVerifyProg_of_mem_support_opening`
+retains the post-opening cache while verifying. The verifier still performs its lookups. See
+[the Merkle oracle programs](../../CslibFrontier/Crypto/Computational/MerkleTree/Prog.lean)
+and [the missing-parent and depth-zero tests](../../CslibFrontierTests/Crypto/Micali.lean).
+
 ## Replace a game's own caches by complete tables
 
 Use this route when a game keeps its random-oracle caches in its own state, such as association
