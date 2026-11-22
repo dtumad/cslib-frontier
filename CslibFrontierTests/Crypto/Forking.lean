@@ -116,4 +116,24 @@ example : (OracleComp.Checkpoint.seek (fun _ (s : List Bool) => (s.headD false, 
     1 (OracleComp.query (spec := fun _ : Bool => Bool) true >>= fun b => OracleComp.query b)
     []).occurrence? = some (false, 0) := rfl
 
+-- The oracle prefix constructor names also work when matching the shared spine.
+example {p r : OracleComp replies ℕ} (path : OracleComp.Prefix p r) :
+    (match p, r, path with
+      | _, _, .root _ => true
+      | _, _, .step _ _ => false) = path.events.isEmpty := by
+  cases path <;> rfl
+
+-- Rewind before the second call. Its answer selects different residuals and final traces.
+private def forkAtSecond : OracleComp (fun _ : Bool => Bool) Bool := do
+  let first ← OracleComp.query false
+  let second ← OracleComp.query first
+  if second then OracleComp.query false else pure false
+
+example :
+    let focus := OracleComp.Checkpoint.seek (fun _ (s : List Bool) => (s.headD false, s.tail))
+      1 forkAtSecond [true]
+    focus.resumeWithAnswers false [true, true] = (true, [false, true, false]) ∧
+      focus.resumeWithAnswers false [false, true] = (false, [false, true]) := by
+  exact ⟨rfl, rfl⟩
+
 end CslibFrontierTests.Crypto.Forking

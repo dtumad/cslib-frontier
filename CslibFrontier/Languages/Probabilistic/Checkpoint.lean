@@ -7,6 +7,7 @@ Authors: Quang Dao, Devon Tuma
 module
 -- upstream: candidate
 
+public import Cslib.Foundations.Data.PFunctor.Free.Spine
 public import CslibFrontier.Languages.Probabilistic.Basic
 
 /-!
@@ -17,8 +18,7 @@ Running at most `n` steps produces a `Checkpoint`. If the program still has a qu
 checkpoint retains that request and its continuation, whose argument is the reply type of
 that request. Selecting replies by position allows repeated calls to receive different replies.
 
-This specializes the typed cursor for polynomial free programs in PolyFun
-(`PFunctor.Free.Cursor` and `PFunctor.Free.Cursor.Occurrence`) to indexed replay.
+Indexed replay uses CSLib’s `PFunctor.FreeM.Cursor.Spine`, shared with PolyFun’s typed cursors.
 A checkpoint records the current residual itself, allowing two forks to share its continuation.
 -/
 
@@ -30,30 +30,35 @@ universe u v w z
 
 variable {Q : Type u} {spec : OracleSpec.{u, v} Q} {α : Type w}
 
-/-- A typed path from the source program to a residual. Each step retains its actual reply. -/
-inductive Prefix : OracleComp spec α → OracleComp spec α → Type (max u v w) where
-  | root (p : OracleComp spec α) : Prefix p p
-  | step {q : Q} {k : spec q → OracleComp spec α} {r : OracleComp spec α} (a : spec q)
-      (rest : Prefix (k a) r) : Prefix (PFunctor.FreeM.liftBind q k) r
+/-- The replies selecting a particular residual of an oracle program. -/
+abbrev Prefix (p r : OracleComp spec α) := PFunctor.FreeM.Cursor.Spine p r
 
 namespace Prefix
+
+/-- The empty prefix at a program. -/
+@[match_pattern] abbrev root (p : OracleComp spec α) : Prefix p p :=
+  PFunctor.FreeM.Cursor.Spine.root p
+
+/-- Extend a prefix backwards across the call answered by `a`. -/
+@[match_pattern] abbrev step {q : Q} {k : spec q → OracleComp spec α} {r : OracleComp spec α}
+    (a : spec q) (rest : Prefix (k a) r) : Prefix (PFunctor.FreeM.liftBind q k) r :=
+  PFunctor.FreeM.Cursor.Spine.down a rest
 
 /-- Chronological requests and dependent replies along the prefix. -/
 @[expose] def events {p r : OracleComp spec α} : Prefix p r → List ((q : Q) × spec q)
   | .root _ => []
-  | .step (q := q) a rest => ⟨q, a⟩ :: rest.events
+  | .down (a := q) a rest => ⟨q, a⟩ :: events rest
 
 /-- Resume at the residual and plug the second prefix back into the original program. -/
-@[expose] def append {p r t : OracleComp spec α} : Prefix p r → Prefix r t → Prefix p t
-  | .root _, tail => tail
-  | .step a rest, tail => .step a (rest.append tail)
+abbrev append {p r t : OracleComp spec α} (first : Prefix p r) (second : Prefix r t) :
+    Prefix p t := first.comp second
 
 /-- Plugging a prefix into its context reconstructs the concatenation of the two histories. -/
 @[simp] theorem events_append {p r t : OracleComp spec α} (h : Prefix p r) (s : Prefix r t) :
     (h.append s).events = h.events ++ s.events := by
   induction h with
   | root => rfl
-  | step a rest ih => simp only [append, events, List.cons_append, ih]
+  | down a rest ih => exact congrArg (_ :: ·) (ih s)
 
 end Prefix
 
@@ -84,6 +89,15 @@ namespace Checkpoint
 @[expose] def queries {p : OracleComp spec α} : Checkpoint p → List Q
   | .done _ path => path.events.map Sigma.fst
   | .call q _ path => path.events.map Sigma.fst ++ [q]
+
+/-- The unanswered request, if the program reaches one at this position. -/
+@[expose] def focusedRequest? {p : OracleComp spec α} : Checkpoint p → Option Q
+  | .done .. => none
+  | .call q .. => some q
+
+@[simp] theorem focusedRequest?_prepend {q : Q} {k : spec q → OracleComp spec α}
+    (a : spec q) (c : Checkpoint (k a)) : (prepend a c).focusedRequest? = c.focusedRequest? := by
+  cases c <;> rfl
 
 /-- The selected request and its zero-based occurrence among requests with that same name.
 The count excludes the selected request itself. -/
