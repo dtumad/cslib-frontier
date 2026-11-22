@@ -7,6 +7,7 @@ Authors: Samuel Schlesinger, Alexander Hicks
 module
 -- upstream: candidate
 
+public import Cslib.Foundations.Data.PFunctor.Free.Partial
 public import CslibFrontier.Languages.Probabilistic.Oracle.EvalPure
 public import CslibFrontier.Languages.Probabilistic.RandomOracle
 import CslibFrontier.Probability.PMF.Map
@@ -39,8 +40,8 @@ from VCVio's random-oracle query-tracking library.
 
 * `Cslib.OracleComp.interpret_finalCache_of_mem_support_runWith_answer`: each supported run
   settles its program in its final cache.
-* `Cslib.OracleComp.run_interpret_eq_pure_of_interpret_some`: a stateful handler replays a
-  settled program without changing the live state.
+* `PFunctor.FreeM.run_liftM_eq_pure_of_liftM_eq_some` replays a settled program while
+  preserving the entire interpreter state.
 * `Cslib.OracleComp.mem_support_runWith_answer_invariant`: the cache invariant of supported runs.
 * `Cslib.OracleComp.map_fst_runWith_answer_eq_pure`: oracle programs that are constant on the
   support of `dist` are deterministic under the lazy random oracle.
@@ -55,43 +56,6 @@ namespace OracleComp
 universe u
 
 variable {ι : Type u} {spec : OracleSpec.{u, u} ι} {α : Type u}
-
-/-- Any interpreter that agrees with the partial oracle on assigned requests returns the settled
-value without effects. Taking the other interpreter to be another partial oracle gives stability
-under cache extension. -/
-theorem interpret_eq_pure_of_interpret_some {m : Type u → Type*} [Monad m] [LawfulMonad m]
-    (cache : RandomOracle.Cache spec) (oracle : (q : ι) → m (spec q))
-    (agree : ∀ q v, cache q = some v → oracle q = pure v)
-    (prog : OracleComp spec α) {a : α} (settled : interpret cache prog = some a) :
-    interpret oracle prog = pure a := by
-  induction prog using OracleComp.induction with
-  | pure value => simpa using congrArg (pure (f := m)) (Option.some.inj settled)
-  | query_bind q cont ih =>
-    rw [PFunctor.FreeM.bind_eq_bind, interpret_bind, interpret_query] at settled ⊢
-    cases hc : cache q with
-    | none => simp [hc] at settled
-    | some v =>
-      rw [agree q v hc, pure_bind]
-      exact ih v (by simpa [hc] using settled)
-
-/-- A handler that answers cached queries without changing its private state replays a settled
-program from that state. In particular the live cache may contain more entries than the cache
-which settled the program. -/
-theorem run_interpret_eq_pure_of_interpret_some {m : Type u → Type*} [Monad m] [LawfulMonad m]
-    {σ : Type u} (cache : RandomOracle.Cache spec) (oracle : (q : ι) → StateT σ m (spec q))
-    (s : σ) (hit : ∀ q v, cache q = some v → (oracle q).run s = pure (v, s))
-    (prog : OracleComp spec α) {a : α} (settled : interpret cache prog = some a) :
-    (interpret oracle prog).run s = pure (a, s) := by
-  induction prog using OracleComp.induction with
-  | pure value => cases Option.some.inj settled; rfl
-  | query_bind q cont ih =>
-    rw [PFunctor.FreeM.bind_eq_bind, interpret_bind, interpret_query] at settled
-    rw [PFunctor.FreeM.bind_eq_bind, interpret_bind, interpret_query, StateT.run_bind]
-    cases hc : cache q with
-    | none => simp [hc] at settled
-    | some v =>
-      rw [hit q v hc, pure_bind]
-      exact ih v (by simpa [hc] using settled)
 
 /-- Every supported lazy run extends its initial cache, adds only supported fresh assignments,
 and can be replayed by looking up the entries in its final cache. Entries supplied at the start
@@ -150,7 +114,8 @@ theorem mem_support_runWith_answer_invariant [DecidableEq ι] (dist : (q : ι) �
     | some w =>
       have hEq := Option.some.inj ((extend q w hq).symm.trans hv)
       exact hEq ▸ hsupp q w hq
-  · exact (interpret_eq_pure_of_interpret_some (m := Id) cache' h hh prog replay).symm
+  · exact (PFunctor.FreeM.liftM_eq_pure_of_liftM_eq_some (P := ⟨ι, spec⟩) (m := Id)
+      cache' h hh replay).symm
 
 /-- Extend a partial cache `cache` to a total deterministic oracle by returning `v` when
 `cache q = some v` and otherwise choosing an element in `(dist q).support`. -/

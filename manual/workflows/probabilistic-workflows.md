@@ -1932,7 +1932,7 @@ Read an adaptive program `p` in a partial cache `c` with `OracleComp.interpret c
 `some a` means the cache holds each answer that this execution needed. A missing key stops the
 read immediately. A supported lazy run always succeeds on its own final cache. To replay against
 a live handler, prove that each assigned key returns its stored value and preserves the live
-state. `OracleComp.run_interpret_eq_pure_of_interpret_some` then gives the joint result and
+state. `PFunctor.FreeM.run_liftM_eq_pure_of_liftM_eq_some` then gives the joint result and
 unchanged state. This also applies to a list cache with unrelated entries or shadowed duplicates.
 
 In an honest Merkle opening, leaf and parent construction have already queried every node that

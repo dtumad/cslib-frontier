@@ -70,24 +70,28 @@ example : OracleComp.interpret (fun q : List Bool =>
 example : OracleComp.interpret (fun _ : List Bool => none) (merkleVerifyProg 0 [] 0 [] []) =
     none := rfl
 
--- Sampling an honest two-leaf opening and verifying it gives the joint distribution of
--- acceptance and the very same cache sampled during opening.
-example (σ : ℕ) :
+-- A three-leaf tree pads to four slots. Indices one and two descend through opposite
+-- halves, reversing the sibling order at both levels. Verification preserves the whole cache.
+private theorem verifyPaddedOpening (σ i : ℕ) (hi : i < 4) :
+    let padded := [[true], [false], [true, false]]
     let opening : OracleComp MerkleHashSpec _ := do
-      let root ← merkleRootProg leaves
-      let path ← merklePathProg leaves 1
+      let root ← merkleRootProg padded
+      let path ← merklePathProg padded i
       return (root, path)
     let answer := RandomOracle.answer fun _ : List Bool => BitString.uniformList σ
     let opened := OracleComp.runWith answer opening (fun _ => none)
     opened.bind (fun ((root, path), cache) =>
-      OracleComp.runWith answer (merkleVerifyProg 1 root 1 [false] path) cache) =
+      OracleComp.runWith answer (merkleVerifyProg 2 root i (padded.getD i []) path) cache) =
         opened.map (fun result => (true, result.2)) := by
   dsimp only
   apply Probability.PMF.bind_congr_on_support
   rintro ⟨⟨root, path⟩, cache⟩ hopen
   exact runWith_merkleVerifyProg_of_mem_support_opening _
-    (fun _ _ ha => BitString.length_of_mem_support_uniformList ha) leaves (by decide)
-    hopen cache (fun _ _ h => h)
+    (fun _ _ ha => BitString.length_of_mem_support_uniformList ha)
+    [[true], [false], [true, false]] hi hopen cache (fun _ _ h => h)
+
+example (σ : ℕ) := verifyPaddedOpening σ 1 (by decide)
+example (σ : ℕ) := verifyPaddedOpening σ 2 (by decide)
 
 -- Flipping the leaf bit, giving a path of the wrong length, using an out-of-range index, or giving
 -- a label that is not a sixteen-bit digest is rejected by `merkleVerifyProg`.

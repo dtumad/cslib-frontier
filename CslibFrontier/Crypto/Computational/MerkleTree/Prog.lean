@@ -355,9 +355,11 @@ theorem runWith_merkleVerifyProg_of_mem_support_opening {ℓ : ℕ}
   cases hpair
   have trueResult := evalPure_merkleVerifyProg_merklePathProg h hw leaves hi
   have hrt' : OracleComp.evalPure h (merkleRootProg leaves) = root :=
-    OracleComp.interpret_eq_pure_of_interpret_some (m := Id) cache h agree _ hrt
+    PFunctor.FreeM.liftM_eq_pure_of_liftM_eq_some (P := ⟨_, MerkleHashSpec⟩) (m := Id)
+      cache h agree hrt
   have hp' : OracleComp.evalPure h (merklePathProg leaves i) = path :=
-    OracleComp.interpret_eq_pure_of_interpret_some (m := Id) cache h agree _ hp
+    PFunctor.FreeM.liftM_eq_pure_of_liftM_eq_some (P := ⟨_, MerkleHashSpec⟩) (m := Id)
+      cache h agree hp
   simp only [OracleComp.evalPure_bind, hrt', hp'] at trueResult
   simp only [merklePathProg, OracleComp.interpret_bind, OracleComp.interpret_pure] at hp
   obtain ⟨level, hl, endState, hloop, hpath⟩ : ∃ level,
@@ -378,11 +380,13 @@ theorem runWith_merkleVerifyProg_of_mem_support_opening {ℓ : ℕ}
     exact ⟨_, rfl⟩
   obtain ⟨ok, hok⟩ := settledVerdict
   have hok' : OracleComp.evalPure h verdict = ok :=
-    OracleComp.interpret_eq_pure_of_interpret_some (m := Id) cache h agree _ hok
+    PFunctor.FreeM.liftM_eq_pure_of_liftM_eq_some (P := ⟨_, MerkleHashSpec⟩) (m := Id)
+      cache h agree hok
   rw [← hok', trueResult] at hok
   rw [OracleComp.runWith_eq_run_interpret]
-  exact OracleComp.run_interpret_eq_pure_of_interpret_some cache (RandomOracle.answer dist) live
-    (fun q v hv => RandomOracle.answer_of_some dist live q v (extend q v hv)) verdict hok
+  exact PFunctor.FreeM.run_liftM_eq_pure_of_liftM_eq_some (P := ⟨_, MerkleHashSpec⟩)
+    cache (RandomOracle.answer dist) live
+    (fun q v hv => RandomOracle.answer_of_some dist live q v (extend q v hv)) hok
 
 /-- **Completeness of `merkleVerifyProg` against `merklePathProg` (lazy random-oracle form)**:
 under a shared lazy random oracle `RandomOracle.answer dist` whose answers all have `ℓ` bits,

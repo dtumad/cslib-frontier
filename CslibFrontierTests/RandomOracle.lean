@@ -91,13 +91,25 @@ example : ((OracleComp.interpret (memoize counted) (do
     return x + y)).run [(false, 4), (false, 9), (true, 3)]).run 7 =
       ((8, [(false, 4), (false, 9), (true, 3)]), 7) := by
   apply congrArg (fun action : StateM ℕ (ℕ × List (Bool × ℕ)) => action.run 7)
-    (OracleComp.run_interpret_eq_pure_of_interpret_some
+    (PFunctor.FreeM.run_liftM_eq_pure_of_liftM_eq_some (P := ⟨Bool, fun _ => ℕ⟩)
       (fun q : Bool => if q then none else some 4) (memoize counted)
-      [(false, 4), (false, 9), (true, 3)] ?_ _ (by rfl))
+      [(false, 4), (false, 9), (true, 3)] ?_ (by rfl))
   intro q v hv
   cases q with
   | false => cases Option.some.inj hv; rfl
   | true => simp at hv
+
+-- A cached reply outside the sampler's support survives while a fresh query draws from it.
+private def initial (q : Bool) : Option Bool := if q then none else some true
+
+example :
+    OracleComp.runWith (RandomOracle.answer fun _ : Bool => PMF.pure false)
+      (do
+        let hit ← OracleComp.query (spec := fun _ : Bool => Bool) false
+        let draw ← OracleComp.query true
+        return (hit, draw)) initial =
+      PMF.pure ((true, false), Function.update initial true (some false)) := by
+  simp [RandomOracle.answer, initial]
 
 -- Sampling cannot repair a missing adaptive answer in a partial replay.
 example : OracleComp.interpret (fun q : Bool => if q then none else some true) adaptive =
