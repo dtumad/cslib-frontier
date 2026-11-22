@@ -8,6 +8,7 @@ module
 -- upstream: candidate
 
 public import CslibFrontier.Languages.Probabilistic.Basic
+import Cslib.Foundations.Data.PFunctor.Free.StateT
 import CslibFrontier.Probability.PMF.Bind
 import CslibFrontier.Foundations.Control.Monad.IsMonadHom.StateT
 
@@ -200,13 +201,8 @@ theorem map_state_run_interpret
     (step : ∀ q s, (fun (a, s') => (a, represent s')) <$> oracle q s =
       oracle' q (represent s)) (program : OracleComp spec α) (s : State) :
     (fun (a, s') => (a, represent s')) <$> (interpret oracle program).run s =
-      (interpret oracle' program).run (represent s) := by
-  induction program using OracleComp.induction generalizing s with
-  | pure a => simp
-  | query_bind q cont ih =>
-    simp only [PFunctor.FreeM.bind_eq_bind, run_interpret_bind, run_interpret_query, map_bind]
-    rw [← step q s, bind_map_left]
-    exact bind_congr fun (a, s') => ih a s'
+      (interpret oracle' program).run (represent s) :=
+  PFunctor.FreeM.map_state_run_liftM (P := ⟨ι, spec⟩) oracle oracle' represent step program s
 
 /-- Representing each PMF transition maps the joint output and final state of an adaptive run. -/
 theorem run_interpret_map_state
