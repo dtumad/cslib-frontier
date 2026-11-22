@@ -14,7 +14,7 @@ public import CslibFrontier.Languages.Probabilistic.Oracle.Substitution
 public import CslibFrontier.Probability.StatisticalDistance.CloseTo
 import CslibFrontier.Foundations.Data.List.SortedAssoc
 import CslibFrontier.Languages.Probabilistic.Oracle.Simulation
-import CslibFrontier.Languages.Probabilistic.Oracle.Relabel
+import CslibFrontier.Languages.Probabilistic.Oracle.Relabel.RunWith
 import CslibFrontier.Languages.Probabilistic.UntilBad.Flag
 
 /-!

@@ -1874,6 +1874,18 @@ and the certification and key-expansion hops of
 [TreeSignature/Security.lean](../../CslibFrontier/Crypto/Computational/TreeSignature/Security.lean)
 are worked clients.
 
+## Relabel a request and decode its reply
+
+Use `OracleComp.relabel` from `Languages.Probabilistic.Oracle.Relabel` when each source
+request makes one target call. Its two arguments form a polynomial lens. For example, a session
+identifier can become part of the outgoing request while the continuation still sees the original
+reply type. `OracleComp.interpret_relabel` pulls the target handler back along that lens.
+
+Import `QueryCount.Relabel` for the corresponding structural bound. A decoder that omits a
+reply can discard an expensive branch. Surjectivity gives `isCostBounded_relabel_iff`.
+For private samples, `Oracle.Relabel.RunWith` supplies `ProbOracleComp.runWith_relabel`,
+which preserves the joint distribution of the result and final handler state.
+
 ## Pass a query adapter through an eager/lazy game hop
 
 Import [Oracle/Substitution.lean](../../CslibFrontier/Languages/Probabilistic/Oracle/Substitution.lean)

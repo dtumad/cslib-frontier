@@ -10,7 +10,7 @@ module
 public import CslibFrontier.Crypto.Protocols.UC.MultiSession
 import CslibFrontier.Crypto.Protocols.SSP.ParFinLazy
 import CslibFrontier.Languages.Probabilistic.Oracle.Interaction
-import CslibFrontier.Languages.Probabilistic.Oracle.Relabel
+import CslibFrontier.Languages.Probabilistic.Oracle.Relabel.RunWith
 
 /-!
 # Universal composition with joint state (step theorems and lazy multi-session functionality)

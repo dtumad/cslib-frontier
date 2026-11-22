@@ -3,7 +3,8 @@ Copyright (c) 2026 Devon Tuma. All rights reserved.
 Released under Apache 2.0 license as described in the file LICENSE.
 Authors: Devon Tuma
 -/
-import CslibFrontier.Languages.Probabilistic.Oracle.Relabel
+import CslibFrontier.Languages.Probabilistic.Oracle.Relabel.RunWith
+import CslibFrontier.Languages.Probabilistic.QueryCount.Relabel
 
 /-! # Relabeling an adaptive request and preserving private samples -/
 
